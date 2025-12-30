@@ -27,15 +27,14 @@ func (h *Handler) CreateSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		ID      string `json:"id"`
-		TableID int    `json:"table_id"`
+		TableID int `json:"table_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	session, err := h.svc.CreateSession(req.ID, req.TableID)
+	session, err := h.svc.CreateSession(req.TableID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

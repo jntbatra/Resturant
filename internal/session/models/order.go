@@ -12,10 +12,10 @@ type Order struct {
 }
 
 type OrderItems struct {
-	ID         string      // unique order ID
-	OrderID    string      // associated order ID
-	MenuItemID string      // associated menu item ID
-	Quantity   int         // quantity of the menu item in the order
+	ID         string // unique order ID
+	OrderID    string // associated order ID
+	MenuItemID string // associated menu item ID
+	Quantity   int    // quantity of the menu item in the order
 }
 
 type OrderStatus string

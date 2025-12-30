@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"errors"
 	"restaurant/internal/session/models"
+
+	"github.com/google/uuid"
 )
 
 // MenuRepository defines methods for menu item database operations
@@ -25,6 +27,12 @@ type MenuRepository interface {
 
 	// DeleteMenuItem deletes a menu item by ID
 	DeleteMenuItem(id string) error
+
+	// ListCategories lists all unique categories
+	ListCategories() ([]string, error)
+
+	// CreateCategory creates a new category
+	CreateCategory(name string) error
 }
 
 // ErrMenuItemNotFound is returned when a menu item is not found
@@ -115,3 +123,32 @@ func (r *postgresMenuRepository) DeleteMenuItem(id string) error {
 	_, err := r.db.Exec("DELETE FROM menu_items WHERE id = $1", id)
 	return err
 }
+
+func (r *postgresMenuRepository) ListCategories() ([]string, error) {
+	rows, err := r.db.Query("SELECT name FROM categories ORDER BY name")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var categories []string
+	for rows.Next() {
+		var category string
+		err := rows.Scan(&category)
+		if err != nil {
+			return nil, err
+		}
+		categories = append(categories, category)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return categories, nil
+}
+
+func (r *postgresMenuRepository) CreateCategory(name string) error {
+	id := uuid.New().String()
+	_, err := r.db.Exec("INSERT INTO categories (id, name) VALUES ($1, $2)", id, name)
+	return err
+}
+
