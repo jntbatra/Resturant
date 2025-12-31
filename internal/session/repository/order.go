@@ -5,6 +5,7 @@ import (
 
 	"restaurant/internal/session/models"
 
+	"github.com/google/uuid"
 	"github.com/lib/pq"
 )
 
@@ -14,25 +15,25 @@ type OrderRepository interface {
 	CreateOrder(order *models.Order) error
 
 	// GetOrder retrieves an order by ID
-	GetOrder(id string) (*models.Order, error)
+	GetOrder(id uuid.UUID) (*models.Order, error)
 
 	// ListOrders lists all orders
 	ListOrders(limit int, offset int) ([]*models.Order, error)
 
 	// UpdateOrder updates an order
-	UpdateOrder(orderID string, status string) error
+	UpdateOrder(orderID uuid.UUID, status string) error
 
 	// CreateOrderItem creates a new order item
 	CreateOrderItem(item *models.OrderItems) error
 
 	// GetOrderItems retrieves order items by order ID
-	GetOrderItems(orderID string) ([]*models.OrderItems, error)
+	GetOrderItems(orderID uuid.UUID) ([]*models.OrderItems, error)
 
 	// GetOrdersBySession retrieves orders by session ID
-	GetOrdersBySession(sessionID string) ([]*models.Order, error)
+	GetOrdersBySession(sessionID uuid.UUID) ([]*models.Order, error)
 
 	// GetOrderItemsByOrderIDs retrieves order items by multiple order IDs
-	GetOrderItemsByOrderIDs(orderIDs []string) ([]*models.OrderItems, error)
+	GetOrderItemsByOrderIDs(orderIDs []uuid.UUID) ([]*models.OrderItems, error)
 }
 
 // postgresOrderRepository implements OrderRepository using PostgreSQL
@@ -50,7 +51,7 @@ func NewOrderRepository(db *sql.DB) OrderRepository {
 // CreateOrder inserts a new order into the database
 func (r *postgresOrderRepository) CreateOrder(order *models.Order) error {
 	// Execute INSERT query with order details
-	_, err := r.db.Exec("INSERT INTO orders (id, session_id, status, created_at) VALUES ($1, $2, $3, $4)", order.ID, order.SessionID, order.Status, order.CreatedAt)
+	_, err := r.db.Exec("INSERT INTO orders (id, session_id, status, created_at) VALUES ($1, $2, $3, $4)", order.ID.String(), order.SessionID.String(), order.Status, order.CreatedAt)
 	if err != nil {
 		return err
 	}
@@ -58,10 +59,10 @@ func (r *postgresOrderRepository) CreateOrder(order *models.Order) error {
 }
 
 // GetOrder retrieves an order by ID from the database
-func (r *postgresOrderRepository) GetOrder(id string) (*models.Order, error) {
+func (r *postgresOrderRepository) GetOrder(id uuid.UUID) (*models.Order, error) {
 	var order models.Order
 	// Execute SELECT query and scan result
-	err := r.db.QueryRow("SELECT id, session_id, status, created_at FROM orders WHERE id = $1", id).Scan(&order.ID, &order.SessionID, &order.Status, &order.CreatedAt)
+	err := r.db.QueryRow("SELECT id, session_id, status, created_at FROM orders WHERE id = $1", id.String()).Scan(&order.ID, &order.SessionID, &order.Status, &order.CreatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -99,7 +100,7 @@ func (r *postgresOrderRepository) ListOrders(limit int, offset int) ([]*models.O
 // CreateOrderItem creates a new order item in the database
 func (r *postgresOrderRepository) CreateOrderItem(item *models.OrderItems) error {
 	// Execute INSERT query for order item
-	_, err := r.db.Exec("INSERT INTO order_items (id, order_id, menu_item_id, quantity) VALUES ($1, $2, $3, $4)", item.ID, item.OrderID, item.MenuItemID, item.Quantity)
+	_, err := r.db.Exec("INSERT INTO order_items (id, order_id, menu_item_id, quantity) VALUES ($1, $2, $3, $4)", item.ID.String(), item.OrderID.String(), item.MenuItemID.String(), item.Quantity)
 	if err != nil {
 		return err
 	}
@@ -107,9 +108,9 @@ func (r *postgresOrderRepository) CreateOrderItem(item *models.OrderItems) error
 }
 
 // UpdateOrder updates an order status in the database
-func (r *postgresOrderRepository) UpdateOrder(orderID string, status string) error {
+func (r *postgresOrderRepository) UpdateOrder(orderID uuid.UUID, status string) error {
 	// Execute UPDATE query
-	_, err := r.db.Exec("UPDATE orders SET status = $1 WHERE id = $2", status, orderID)
+	_, err := r.db.Exec("UPDATE orders SET status = $1 WHERE id = $2", status, orderID.String())
 	if err != nil {
 		return err
 	}
@@ -117,9 +118,9 @@ func (r *postgresOrderRepository) UpdateOrder(orderID string, status string) err
 }
 
 // GetOrderItems retrieves order items by order ID
-func (r *postgresOrderRepository) GetOrderItems(orderID string) ([]*models.OrderItems, error) {
+func (r *postgresOrderRepository) GetOrderItems(orderID uuid.UUID) ([]*models.OrderItems, error) {
 	// Execute SELECT query
-	rows, err := r.db.Query("SELECT id, order_id, menu_item_id, quantity FROM order_items WHERE order_id = $1", orderID)
+	rows, err := r.db.Query("SELECT id, order_id, menu_item_id, quantity FROM order_items WHERE order_id = $1", orderID.String())
 	if err != nil {
 		return nil, err
 	}
@@ -142,9 +143,9 @@ func (r *postgresOrderRepository) GetOrderItems(orderID string) ([]*models.Order
 }
 
 // GetOrdersBySession retrieves orders by session ID
-func (r *postgresOrderRepository) GetOrdersBySession(sessionID string) ([]*models.Order, error) {
+func (r *postgresOrderRepository) GetOrdersBySession(sessionID uuid.UUID) ([]*models.Order, error) {
 	// Execute SELECT query
-	rows, err := r.db.Query("SELECT id, session_id, status, created_at FROM orders WHERE session_id = $1", sessionID)
+	rows, err := r.db.Query("SELECT id, session_id, status, created_at FROM orders WHERE session_id = $1", sessionID.String())
 	if err != nil {
 		return nil, err
 	}
@@ -167,9 +168,14 @@ func (r *postgresOrderRepository) GetOrdersBySession(sessionID string) ([]*model
 }
 
 // GetOrderItemsByOrderIDs retrieves order items by multiple order IDs
-func (r *postgresOrderRepository) GetOrderItemsByOrderIDs(orderIDs []string) ([]*models.OrderItems, error) {
+func (r *postgresOrderRepository) GetOrderItemsByOrderIDs(orderIDs []uuid.UUID) ([]*models.OrderItems, error) {
+	// Convert UUIDs to strings for database query
+	orderIDStrings := make([]string, len(orderIDs))
+	for i, id := range orderIDs {
+		orderIDStrings[i] = id.String()
+	}
 	// Execute SELECT query using ANY with array parameter
-	rows, err := r.db.Query("SELECT id, order_id, menu_item_id, quantity FROM order_items WHERE order_id = ANY($1)", pq.Array(orderIDs))
+	rows, err := r.db.Query("SELECT id, order_id, menu_item_id, quantity FROM order_items WHERE order_id = ANY($1)", pq.Array(orderIDStrings))
 	if err != nil {
 		return nil, err
 	}

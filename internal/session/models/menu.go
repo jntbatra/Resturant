@@ -2,10 +2,12 @@ package models
 
 import (
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type MenuItem struct {
-	ID                string     // unique menu item ID
+	ID                uuid.UUID  // unique menu item ID
 	Name              string     // name of the menu item
 	Description       string     // description of the menu item
 	Price             float64    // price of the menu item
@@ -22,6 +24,6 @@ const (
 )
 
 type category struct {
-	ID   string // unique category ID
-	Name string // name of the category
+	ID   uuid.UUID // unique category ID
+	Name string    // name of the category
 }

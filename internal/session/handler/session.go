@@ -7,6 +7,8 @@ import (
 
 	"restaurant/internal/session/models"
 	"restaurant/internal/session/service"
+
+	"github.com/google/uuid"
 )
 
 // Handler handles HTTP requests for sessions
@@ -51,7 +53,13 @@ func (h *Handler) GetSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id := r.URL.Path[len("/sessions/"):] // simple path parsing
+	idStr := r.URL.Path[len("/sessions/"):] // simple path parsing
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		http.Error(w, "Invalid session ID", http.StatusBadRequest)
+		return
+	}
+
 	session, err := h.svc.GetSession(id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -73,9 +81,15 @@ func (h *Handler) UpdateSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id := r.URL.Path[len("/sessions/"):] // simplistic
-	if len(id) > 7 && id[len(id)-7:] == "/status" {
-		id = id[:len(id)-7]
+	idStr := r.URL.Path[len("/sessions/"):] // simplistic
+	if len(idStr) > 7 && idStr[len(idStr)-7:] == "/status" {
+		idStr = idStr[:len(idStr)-7]
+	}
+
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		http.Error(w, "Invalid session ID", http.StatusBadRequest)
+		return
 	}
 
 	var req struct {

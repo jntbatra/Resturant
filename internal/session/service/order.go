@@ -11,14 +11,14 @@ import (
 
 // OrderService defines business logic for orders
 type OrderService interface {
-	CreateOrder(sessionID string) error
-	GetOrder(id string) (*models.Order, error)
+	CreateOrder(sessionID uuid.UUID) error
+	GetOrder(id uuid.UUID) (*models.Order, error)
 	ListOrders(limit int, offset int) ([]*models.Order, error)
-	UpdateOrder(orderID string, status string) error
-	CreateOrderItem(itemID string, quantity int, orderID string) error
-	GetOrderItems(orderID string) ([]*models.OrderItems, error)
-	GetOrdersBySession(sessionID string) ([]*models.Order, error)
-	GetOrderItemsBySessionID(sessionID string) ([]*models.OrderItems, error)
+	UpdateOrder(orderID uuid.UUID, status string) error
+	CreateOrderItem(itemID uuid.UUID, quantity int, orderID uuid.UUID) error
+	GetOrderItems(orderID uuid.UUID) ([]*models.OrderItems, error)
+	GetOrdersBySession(sessionID uuid.UUID) ([]*models.Order, error)
+	GetOrderItemsBySessionID(sessionID uuid.UUID) ([]*models.OrderItems, error)
 }
 
 // orderService implements OrderService
@@ -38,14 +38,10 @@ func NewOrderService(repo repository.OrderRepository, menuService MenuService) O
 // Implementations (wrappers around repository)
 
 // CreateOrder creates a new order for the given session ID with validation
-func (s *orderService) CreateOrder(sessionID string) error {
-	// Validate input: session ID is required
-	if sessionID == "" {
-		return errors.New("session ID is required")
-	}
+func (s *orderService) CreateOrder(sessionID uuid.UUID) error {
 	// Create new order with generated UUID, initial status 'cart', and current timestamp
 	order := &models.Order{
-		ID:        uuid.New().String(),
+		ID:        uuid.New(),
 		SessionID: sessionID,
 		Status:    "cart",
 		CreatedAt: time.Now(),
@@ -55,11 +51,7 @@ func (s *orderService) CreateOrder(sessionID string) error {
 }
 
 // GetOrder retrieves an order by ID with validation
-func (s *orderService) GetOrder(id string) (*models.Order, error) {
-	// Validate input: order ID is required
-	if id == "" {
-		return nil, errors.New("order ID is required")
-	}
+func (s *orderService) GetOrder(id uuid.UUID) (*models.Order, error) {
 	// Retrieve order from repository
 	return s.repo.GetOrder(id)
 }
@@ -79,11 +71,7 @@ func (s *orderService) ListOrders(limit int, offset int) ([]*models.Order, error
 }
 
 // UpdateOrder updates an order status with validation
-func (s *orderService) UpdateOrder(orderID string, status string) error {
-	// Validate inputs: order ID and status are required
-	if orderID == "" {
-		return errors.New("order ID is required")
-	}
+func (s *orderService) UpdateOrder(orderID uuid.UUID, status string) error {
 	if status == "" {
 		return errors.New("status is required")
 	}
@@ -104,16 +92,10 @@ func (s *orderService) UpdateOrder(orderID string, status string) error {
 }
 
 // CreateOrderItem creates a new order item with validation
-func (s *orderService) CreateOrderItem(itemID string, quantity int, orderID string) error {
-	// Validate inputs: item ID, quantity > 0, order ID required
-	if itemID == "" {
-		return errors.New("item ID is required")
-	}
+func (s *orderService) CreateOrderItem(itemID uuid.UUID, quantity int, orderID uuid.UUID) error {
+	// Validate inputs: quantity > 0
 	if quantity <= 0 {
 		return errors.New("quantity must be greater than 0")
-	}
-	if orderID == "" {
-		return errors.New("order ID is required")
 	}
 
 	// Validate menu item exists and is available
@@ -127,7 +109,7 @@ func (s *orderService) CreateOrderItem(itemID string, quantity int, orderID stri
 
 	// Create order item with generated UUID
 	Item := &models.OrderItems{
-		ID:         uuid.New().String(),
+		ID:         uuid.New(),
 		MenuItemID: itemID,
 		Quantity:   quantity,
 		OrderID:    orderID,
@@ -137,33 +119,20 @@ func (s *orderService) CreateOrderItem(itemID string, quantity int, orderID stri
 }
 
 // GetOrderItems retrieves order items by order ID with validation
-func (s *orderService) GetOrderItems(orderID string) ([]*models.OrderItems, error) {
-	// Validate input: order ID is required
-	if orderID == "" {
-		return nil, errors.New("order ID is required")
-	}
+func (s *orderService) GetOrderItems(orderID uuid.UUID) ([]*models.OrderItems, error) {
 	// Retrieve order items from repository
 	return s.repo.GetOrderItems(orderID)
 }
 
 // GetOrdersBySession retrieves orders by session ID with validation
-func (s *orderService) GetOrdersBySession(sessionID string) ([]*models.Order, error) {
-	// Validate input: session ID is required
-	if sessionID == "" {
-		return nil, errors.New("session ID is required")
-	}
+func (s *orderService) GetOrdersBySession(sessionID uuid.UUID) ([]*models.Order, error) {
 	// Retrieve orders from repository
 	return s.repo.GetOrdersBySession(sessionID)
 }
 
 // GetOrderItemsBySessionID retrieves order items by session ID
 // by orchestrating multiple repository calls
-func (s *orderService) GetOrderItemsBySessionID(sessionID string) ([]*models.OrderItems, error) {
-	// Validate input: session ID is required
-	if sessionID == "" {
-		return nil, errors.New("session ID is required")
-	}
-
+func (s *orderService) GetOrderItemsBySessionID(sessionID uuid.UUID) ([]*models.OrderItems, error) {
 	// Step 1: Get all orders for the session
 	orders, err := s.repo.GetOrdersBySession(sessionID)
 	if err != nil {
@@ -176,7 +145,7 @@ func (s *orderService) GetOrderItemsBySessionID(sessionID string) ([]*models.Ord
 	}
 
 	// Step 2: Extract order IDs
-	orderIDs := make([]string, len(orders))
+	orderIDs := make([]uuid.UUID, len(orders))
 	for i, order := range orders {
 		orderIDs[i] = order.ID
 	}

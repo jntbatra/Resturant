@@ -14,7 +14,7 @@ type MenuRepository interface {
 	CreateMenuItem(item *models.MenuItem) error
 
 	// GetMenuItem retrieves a menu item by ID
-	GetMenuItem(id string) (*models.MenuItem, error)
+	GetMenuItem(id uuid.UUID) (*models.MenuItem, error)
 
 	// ListMenuItems lists all menu items
 	ListMenuItems() ([]*models.MenuItem, error)
@@ -26,7 +26,7 @@ type MenuRepository interface {
 	UpdateMenuItem(item *models.MenuItem) error
 
 	// DeleteMenuItem deletes a menu item by ID
-	DeleteMenuItem(id string) error
+	DeleteMenuItem(id uuid.UUID) error
 
 	// ListCategories lists all unique categories
 	ListCategories() ([]string, error)
@@ -50,14 +50,14 @@ func NewMenuRepository(db *sql.DB) MenuRepository {
 
 // Implementations (stubs for now)
 func (r *postgresMenuRepository) CreateMenuItem(item *models.MenuItem) error {
-	_, err := r.db.Exec("INSERT INTO menu_items (id, name, description, price, avalability_status, category, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)", 
-		item.ID, item.Name, item.Description, item.Price, item.AvalabilityStatus, item.Category, item.CreatedAt)
+	_, err := r.db.Exec("INSERT INTO menu_items (id, name, description, price, avalability_status, category, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+		item.ID.String(), item.Name, item.Description, item.Price, item.AvalabilityStatus, item.Category, item.CreatedAt)
 	return err
 }
 
-func (r *postgresMenuRepository) GetMenuItem(id string) (*models.MenuItem, error) {
+func (r *postgresMenuRepository) GetMenuItem(id uuid.UUID) (*models.MenuItem, error) {
 	var item models.MenuItem
-	err := r.db.QueryRow("SELECT id, name, description, price, avalability_status, category, created_at FROM menu_items WHERE id = $1", id).Scan(
+	err := r.db.QueryRow("SELECT id, name, description, price, avalability_status, category, created_at FROM menu_items WHERE id = $1", id.String()).Scan(
 		&item.ID, &item.Name, &item.Description, &item.Price, &item.AvalabilityStatus, &item.Category, &item.CreatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -115,12 +115,12 @@ func (r *postgresMenuRepository) GetMenuItemsByCategory(category string) ([]*mod
 
 func (r *postgresMenuRepository) UpdateMenuItem(item *models.MenuItem) error {
 	_, err := r.db.Exec("UPDATE menu_items SET name = $1, description = $2, price = $3, avalability_status = $4, category = $5 WHERE id = $6",
-		item.Name, item.Description, item.Price, item.AvalabilityStatus, item.Category, item.ID)
+		item.Name, item.Description, item.Price, item.AvalabilityStatus, item.Category, item.ID.String())
 	return err
 }
 
-func (r *postgresMenuRepository) DeleteMenuItem(id string) error {
-	_, err := r.db.Exec("DELETE FROM menu_items WHERE id = $1", id)
+func (r *postgresMenuRepository) DeleteMenuItem(id uuid.UUID) error {
+	_, err := r.db.Exec("DELETE FROM menu_items WHERE id = $1", id.String())
 	return err
 }
 
@@ -147,8 +147,7 @@ func (r *postgresMenuRepository) ListCategories() ([]string, error) {
 }
 
 func (r *postgresMenuRepository) CreateCategory(name string) error {
-	id := uuid.New().String()
-	_, err := r.db.Exec("INSERT INTO categories (id, name) VALUES ($1, $2)", id, name)
+	id := uuid.New()
+	_, err := r.db.Exec("INSERT INTO categories (id, name) VALUES ($1, $2)", id.String(), name)
 	return err
 }
-

@@ -2,20 +2,22 @@ package models
 
 import (
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type Order struct {
-	ID        string      // unique order ID
-	SessionID string      // associated session ID
+	ID        uuid.UUID   // unique order ID
+	SessionID uuid.UUID   // associated session ID
 	CreatedAt time.Time   // when the order was created
 	Status    OrderStatus // e.g., OrderStatusPending, OrderStatusPreparing, etc.
 }
 
 type OrderItems struct {
-	ID         string // unique order ID
-	OrderID    string // associated order ID
-	MenuItemID string // associated menu item ID
-	Quantity   int    // quantity of the menu item in the order
+	ID         uuid.UUID // unique order ID
+	OrderID    uuid.UUID // associated order ID
+	MenuItemID uuid.UUID // associated menu item ID
+	Quantity   int       // quantity of the menu item in the order
 }
 
 type OrderStatus string

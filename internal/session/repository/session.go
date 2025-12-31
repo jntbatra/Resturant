@@ -6,18 +6,20 @@ import (
 	"time"
 
 	"restaurant/internal/session/models"
+
+	"github.com/google/uuid"
 )
 
 // Repository defines methods for session database operations
 type Repository interface {
 	// CreateSession creates a new session with the given ID and table ID
-	CreateSession(id string, tableID int) (*models.Session, error)
+	CreateSession(id uuid.UUID, tableID int) (*models.Session, error)
 
 	// GetSession retrieves a session by ID
-	GetSession(id string) (*models.Session, error)
+	GetSession(id uuid.UUID) (*models.Session, error)
 
 	// UpdateSession updates the status of a session
-	UpdateSession(id string,newStatus models.SessionStatus,) error
+	UpdateSession(id uuid.UUID, newStatus models.SessionStatus) error
 
 	// ListSessions lists sessions with pagination (offset and limit)
 	ListSessions(offset int, limit int) ([]*models.Session, error)
@@ -26,7 +28,7 @@ type Repository interface {
 	ListActiveSessions() ([]*models.Session, error)
 
 	// ChangeSessionTable changes the table ID of a session by table number
-	ChangeSessionTable(id string, tableNumber int) error
+	ChangeSessionTable(id uuid.UUID, tableNumber int) error
 }
 
 // postgresRepository implements Repository using PostgreSQL
@@ -41,23 +43,23 @@ func NewPostgresRepository(db *sql.DB) Repository {
 
 // UpdateSession updates the status of a session in the database
 func (r *postgresRepository) UpdateSession(
-    id string,
-    newStatus models.SessionStatus,
+	id uuid.UUID,
+	newStatus models.SessionStatus,
 ) error {
-    if newStatus == models.StatusCompleted {
-        now := time.Now()
-        _, err := r.db.Exec(
-            "UPDATE sessions SET status = $1, completed_at = $2 WHERE id = $3",
-            newStatus, now, id,
-        )
-        return err
-    }
+	if newStatus == models.StatusCompleted {
+		now := time.Now()
+		_, err := r.db.Exec(
+			"UPDATE sessions SET status = $1, completed_at = $2 WHERE id = $3",
+			newStatus, now, id.String(),
+		)
+		return err
+	}
 
-    _, err := r.db.Exec(
-        "UPDATE sessions SET status = $1, completed_at = NULL WHERE id = $2",
-        newStatus, id,
-    )
-    return err
+	_, err := r.db.Exec(
+		"UPDATE sessions SET status = $1, completed_at = NULL WHERE id = $2",
+		newStatus, id.String(),
+	)
+	return err
 }
 
 // ListSessions retrieves a paginated list of sessions from the database
@@ -115,15 +117,15 @@ func (r *postgresRepository) ListActiveSessions() ([]*models.Session, error) {
 }
 
 // ChangeSessionTable changes the table ID of a session by table number
-func (r *postgresRepository) ChangeSessionTable(id string, tableNumber int) error {
-	_, err := r.db.Exec("UPDATE sessions SET table_id = (SELECT id FROM tables WHERE number = $1) WHERE id = $2", tableNumber, id)
+func (r *postgresRepository) ChangeSessionTable(id uuid.UUID, tableNumber int) error {
+	_, err := r.db.Exec("UPDATE sessions SET table_id = (SELECT id FROM tables WHERE number = $1) WHERE id = $2", tableNumber, id.String())
 	return err
 }
 
 // CreateSession inserts a new session into the database
-func (r *postgresRepository) CreateSession(id string, tableID int) (*models.Session, error) {
+func (r *postgresRepository) CreateSession(id uuid.UUID, tableID int) (*models.Session, error) {
 	now := time.Now()
-	_, err := r.db.Exec("INSERT INTO sessions (id, table_id, created_at, completed_at, status) VALUES ($1, $2, $3, $4, $5)", id, tableID, now, nil, models.StatusActive)
+	_, err := r.db.Exec("INSERT INTO sessions (id, table_id, created_at, completed_at, status) VALUES ($1, $2, $3, $4, $5)", id.String(), tableID, now, nil, models.StatusActive)
 	if err != nil {
 		return nil, err
 	}
@@ -138,11 +140,11 @@ func (r *postgresRepository) CreateSession(id string, tableID int) (*models.Sess
 }
 
 // GetSession retrieves a session by ID from the database
-func (r *postgresRepository) GetSession(id string) (*models.Session, error) {
+func (r *postgresRepository) GetSession(id uuid.UUID) (*models.Session, error) {
 	var session models.Session
 	var status string
 	var completedAt *time.Time
-	err := r.db.QueryRow("SELECT id, table_id, created_at, completed_at, status FROM sessions WHERE id = $1", id).Scan(
+	err := r.db.QueryRow("SELECT id, table_id, created_at, completed_at, status FROM sessions WHERE id = $1", id.String()).Scan(
 		&session.ID, &session.TableID, &session.CreatedAt, &completedAt, &status)
 	if err != nil {
 		if err == sql.ErrNoRows {

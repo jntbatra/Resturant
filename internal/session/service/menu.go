@@ -2,19 +2,20 @@ package service
 
 import (
 	"errors"
-	"github.com/google/uuid"
 	"restaurant/internal/session/models"
 	"restaurant/internal/session/repository"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // MenuService defines business logic for menu items
 type MenuService interface {
 	CreateMenuItem(Name string, Description string, Price float64, Category string, AvalabilityStatus models.ItemStatus) error
-	GetMenuItem(id string) (*models.MenuItem, error)
+	GetMenuItem(id uuid.UUID) (*models.MenuItem, error)
 	ListMenuItems() ([]*models.MenuItem, error)
-	UpdateMenuItem(id string, name string, desc string, category string, price float64, status models.ItemStatus) error
-	DeleteMenuItem(id string) error
+	UpdateMenuItem(id uuid.UUID, name string, desc string, category string, price float64, status models.ItemStatus) error
+	DeleteMenuItem(id uuid.UUID) error
 	GetMenuItemsByCategory(category string) ([]*models.MenuItem, error)
 	ListCategories() ([]string, error)
 	CreateCategory(name string) error
@@ -31,10 +32,7 @@ func NewMenuService(repo repository.MenuRepository) MenuService {
 }
 
 // Implementations (wrappers around repository)
-func (s *menuService) GetMenuItem(id string) (*models.MenuItem, error) {
-	if id == "" {
-		return nil, errors.New("id is required")
-	}
+func (s *menuService) GetMenuItem(id uuid.UUID) (*models.MenuItem, error) {
 	return s.repo.GetMenuItem(id)
 }
 
@@ -81,7 +79,7 @@ func (s *menuService) CreateMenuItem(Name string, Description string, Price floa
 	}
 
 	item := &models.MenuItem{
-		ID:                uuid.New().String(),
+		ID:                uuid.New(),
 		Name:              Name,
 		Description:       Description,
 		Price:             Price,
@@ -96,10 +94,7 @@ func (s *menuService) ListMenuItems() ([]*models.MenuItem, error) {
 	return s.repo.ListMenuItems()
 }
 
-func (s *menuService) UpdateMenuItem(id string, name string, desc string, category string, price float64, status models.ItemStatus) error {
-	if id == "" {
-		return errors.New("id is required")
-	}
+func (s *menuService) UpdateMenuItem(id uuid.UUID, name string, desc string, category string, price float64, status models.ItemStatus) error {
 	if name == "" {
 		return errors.New("name is required")
 	}
@@ -149,10 +144,7 @@ func (s *menuService) UpdateMenuItem(id string, name string, desc string, catego
 	return s.repo.UpdateMenuItem(item)
 }
 
-func (s *menuService) DeleteMenuItem(id string) error {
-	if id == "" {
-		return errors.New("id is required")
-	}
+func (s *menuService) DeleteMenuItem(id uuid.UUID) error {
 	return s.repo.DeleteMenuItem(id)
 }
 

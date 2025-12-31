@@ -2,6 +2,8 @@ package models
 
 import (
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // SessionStatus represents the possible states of a session
@@ -16,7 +18,7 @@ const (
 
 // Session represents a dining session started by QR scan
 type Session struct {
-	ID          string        // unique session ID (UUID)
+	ID          uuid.UUID     // unique session ID (UUID)
 	TableID     int           // which table this session is for
 	CreatedAt   time.Time     // when the session was created
 	CompletedAt *time.Time    // when the session was completed, nil if not completed
@@ -24,14 +26,14 @@ type Session struct {
 }
 
 type Table struct {
-	ID        string    // unique table ID
+	ID        uuid.UUID // unique table ID
 	Number    int       // table number in the restaurant
 	CreatedAt time.Time // when the table was created
 }
 
 type Bill struct {
-	ID        string
-	SessionID string
+	ID        uuid.UUID
+	SessionID uuid.UUID
 	Total     float64
 	Subtotal  float64
 	Tax       float64
