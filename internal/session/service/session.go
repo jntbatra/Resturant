@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"restaurant/internal/session/models"
 	"restaurant/internal/session/repository"
@@ -8,14 +9,14 @@ import (
 	"github.com/google/uuid"
 )
 
-// Service defines business logic for sessions
-type Service interface {
-	CreateSession(tableID int) (*models.Session, error)
-	GetSession(id uuid.UUID) (*models.Session, error)
-	UpdateSession(id uuid.UUID, status models.SessionStatus) (*models.Session, error)
-	ListSessions(offset, limit int) ([]*models.Session, error)
-	ListActiveSessions() ([]*models.Session, error)
-	ChangeTable(id uuid.UUID, tableNumber int) error
+// SessionService defines business logic for sessions
+type SessionService interface {
+	CreateSession(ctx context.Context, tableID int) (*models.Session, error)
+	GetSession(ctx context.Context, id uuid.UUID) (*models.Session, error)
+	UpdateSession(ctx context.Context, id uuid.UUID, status models.SessionStatus) (*models.Session, error)
+	ListSessions(ctx context.Context, offset, limit int) ([]*models.Session, error)
+	ListActiveSessions(ctx context.Context) ([]*models.Session, error)
+	ChangeTable(ctx context.Context, id uuid.UUID, tableNumber int) error
 }
 
 // sessionService implements Service
@@ -24,68 +25,75 @@ type sessionService struct {
 }
 
 // NewService creates a new session service
-func NewService(repo repository.Repository) Service {
+func NewService(repo repository.Repository) SessionService {
 	return &sessionService{repo: repo}
 }
 
 // CreateSession creates a new session
-func (s *sessionService) CreateSession(tableID int) (*models.Session, error) {
-	if tableID <= 0 {
-		return nil, errors.New("table ID must be greater than 0")
-	}
+func (s *sessionService) CreateSession(ctx context.Context, tableID int) (*models.Session, error) {
+	// Shape validation (tableID > 0) already done by handler using ValidateStruct
 	id := uuid.New()
-	return s.repo.CreateSession(id, tableID)
+	return s.repo.CreateSession(ctx, id, tableID)
 }
 
 // GetSession retrieves a session
-func (s *sessionService) GetSession(id uuid.UUID) (*models.Session, error) {
-	return s.repo.GetSession(id)
+func (s *sessionService) GetSession(ctx context.Context, id uuid.UUID) (*models.Session, error) {
+	return s.repo.GetSession(ctx, id)
 }
 
 // UpdateSession updates the status of a session
-func (s *sessionService) UpdateSession(id uuid.UUID, status models.SessionStatus) (*models.Session, error) {
-	if status == "" {
-		return nil, errors.New("status is required")
+func (s *sessionService) UpdateSession(ctx context.Context, id uuid.UUID, status models.SessionStatus) (*models.Session, error) {
+	// Get current session to validate state transition (BUSINESS LOGIC)
+	currentSession, err := s.repo.GetSession(ctx, id)
+	if err != nil {
+		return nil, err
 	}
-	// Validate status is valid
-	validStatuses := []models.SessionStatus{"active", "completed", "pending", "cancelled"}
+
+	// Validate state transitions (BUSINESS LOGIC - cannot change completed/cancelled sessions)
+	validTransitions := map[models.SessionStatus][]models.SessionStatus{
+		"active":    {"pending", "cancelled"},
+		"pending":   {"completed", "cancelled"},
+		"completed": {},
+		"cancelled": {},
+	}
+
+	allowedStatuses, exists := validTransitions[currentSession.Status]
+	if !exists {
+		return nil, errors.New("invalid current status")
+	}
+
 	valid := false
-	for _, s := range validStatuses {
-		if status == s {
+	for _, allowed := range allowedStatuses {
+		if status == allowed {
 			valid = true
 			break
 		}
 	}
 	if !valid {
-		return nil, errors.New("invalid status")
+		return nil, errors.New("invalid status transition from " + string(currentSession.Status) + " to " + string(status))
 	}
-	err := s.repo.UpdateSession(id, status)
+
+	// Shape validation (format, ranges) already done by handler using ValidateStruct
+	err = s.repo.UpdateSession(ctx, id, status)
 	if err != nil {
 		return nil, err
 	}
-	return s.repo.GetSession(id)
+	return s.repo.GetSession(ctx, id)
 }
 
 // ListSessions lists sessions with pagination
-func (s *sessionService) ListSessions(offset, limit int) ([]*models.Session, error) {
-	if offset < 0 {
-		return nil, errors.New("offset cannot be negative")
-	}
-	if limit <= 0 || limit > 100 {
-		return nil, errors.New("limit must be between 1 and 100")
-	}
-	return s.repo.ListSessions(offset, limit)
+func (s *sessionService) ListSessions(ctx context.Context, offset, limit int) ([]*models.Session, error) {
+	// Shape validation (offset, limit ranges) already done by handler using ValidateStruct
+	return s.repo.ListSessions(ctx, offset, limit)
 }
 
 // ListActiveSessions lists active sessions
-func (s *sessionService) ListActiveSessions() ([]*models.Session, error) {
-	return s.repo.ListActiveSessions()
+func (s *sessionService) ListActiveSessions(ctx context.Context) ([]*models.Session, error) {
+	return s.repo.ListActiveSessions(ctx)
 }
 
 // ChangeTable changes the table of a session
-func (s *sessionService) ChangeTable(id uuid.UUID, tableNumber int) error {
-	if tableNumber <= 0 {
-		return errors.New("table number must be greater than 0")
-	}
-	return s.repo.ChangeSessionTable(id, tableNumber)
+func (s *sessionService) ChangeTable(ctx context.Context, id uuid.UUID, tableNumber int) error {
+	// Shape validation (tableNumber > 0) already done by handler using ValidateStruct
+	return s.repo.ChangeSessionTable(ctx, id, tableNumber)
 }

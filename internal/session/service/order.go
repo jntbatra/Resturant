@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"restaurant/internal/session/models"
 	"restaurant/internal/session/repository"
@@ -11,14 +12,14 @@ import (
 
 // OrderService defines business logic for orders
 type OrderService interface {
-	CreateOrder(sessionID uuid.UUID) error
-	GetOrder(id uuid.UUID) (*models.Order, error)
-	ListOrders(limit int, offset int) ([]*models.Order, error)
-	UpdateOrder(orderID uuid.UUID, status string) error
-	CreateOrderItem(itemID uuid.UUID, quantity int, orderID uuid.UUID) error
-	GetOrderItems(orderID uuid.UUID) ([]*models.OrderItems, error)
-	GetOrdersBySession(sessionID uuid.UUID) ([]*models.Order, error)
-	GetOrderItemsBySessionID(sessionID uuid.UUID) ([]*models.OrderItems, error)
+	CreateOrder(ctx context.Context, sessionID uuid.UUID) (*models.Order, error)
+	GetOrder(ctx context.Context, id uuid.UUID) (*models.Order, error)
+	ListOrders(ctx context.Context, limit int, offset int) ([]*models.Order, error)
+	UpdateOrder(ctx context.Context, orderID uuid.UUID, status string) error
+	CreateOrderItem(ctx context.Context, itemID uuid.UUID, quantity int, orderID uuid.UUID) (*models.OrderItems, error)
+	GetOrderItems(ctx context.Context, orderID uuid.UUID) ([]*models.OrderItems, error)
+	GetOrdersBySession(ctx context.Context, sessionID uuid.UUID) ([]*models.Order, error)
+	GetOrderItemsBySessionID(ctx context.Context, sessionID uuid.UUID) ([]*models.OrderItems, error)
 }
 
 // orderService implements OrderService
@@ -38,7 +39,7 @@ func NewOrderService(repo repository.OrderRepository, menuService MenuService) O
 // Implementations (wrappers around repository)
 
 // CreateOrder creates a new order for the given session ID with validation
-func (s *orderService) CreateOrder(sessionID uuid.UUID) error {
+func (s *orderService) CreateOrder(ctx context.Context, sessionID uuid.UUID) (*models.Order, error) {
 	// Create new order with generated UUID, initial status 'cart', and current timestamp
 	order := &models.Order{
 		ID:        uuid.New(),
@@ -47,64 +48,44 @@ func (s *orderService) CreateOrder(sessionID uuid.UUID) error {
 		CreatedAt: time.Now(),
 	}
 	// Persist the order in the repository
-	return s.repo.CreateOrder(order)
+	err := s.repo.CreateOrder(ctx, order)
+	if err != nil {
+		return nil, err
+	}
+	return order, nil
 }
 
 // GetOrder retrieves an order by ID with validation
-func (s *orderService) GetOrder(id uuid.UUID) (*models.Order, error) {
+func (s *orderService) GetOrder(ctx context.Context, id uuid.UUID) (*models.Order, error) {
 	// Retrieve order from repository
-	return s.repo.GetOrder(id)
+	return s.repo.GetOrder(ctx, id)
 }
 
 // ListOrders lists orders with pagination and validation
-func (s *orderService) ListOrders(limit int, offset int) ([]*models.Order, error) {
-	// Validate limit: must be between 1 and 100
-	if limit <= 0 || limit > 100 {
-		return nil, errors.New("limit must be between 1 and 100")
-	}
-	// Validate offset: cannot be negative
-	if offset < 0 {
-		return nil, errors.New("offset cannot be negative")
-	}
+func (s *orderService) ListOrders(ctx context.Context, limit int, offset int) ([]*models.Order, error) {
+	// Shape validation (limit, offset ranges) already done by handler using ValidateStruct
 	// Retrieve paginated orders from repository
-	return s.repo.ListOrders(limit, offset)
+	return s.repo.ListOrders(ctx, limit, offset)
 }
 
 // UpdateOrder updates an order status with validation
-func (s *orderService) UpdateOrder(orderID uuid.UUID, status string) error {
-	if status == "" {
-		return errors.New("status is required")
-	}
-	// Validate status against allowed values
-	validStatuses := []string{"cart", "pending", "preparing", "served", "cancelled"}
-	valid := false
-	for _, s := range validStatuses {
-		if status == s {
-			valid = true
-			break
-		}
-	}
-	if !valid {
-		return errors.New("invalid status")
-	}
+func (s *orderService) UpdateOrder(ctx context.Context, orderID uuid.UUID, status string) error {
+	// Shape validation (status oneof) already done by handler using ValidateStruct
 	// Update order status in repository
-	return s.repo.UpdateOrder(orderID, status)
+	return s.repo.UpdateOrder(ctx, orderID, status)
 }
 
 // CreateOrderItem creates a new order item with validation
-func (s *orderService) CreateOrderItem(itemID uuid.UUID, quantity int, orderID uuid.UUID) error {
-	// Validate inputs: quantity > 0
-	if quantity <= 0 {
-		return errors.New("quantity must be greater than 0")
-	}
+func (s *orderService) CreateOrderItem(ctx context.Context, itemID uuid.UUID, quantity int, orderID uuid.UUID) (*models.OrderItems, error) {
+	// Shape validation (quantity > 0) already done by handler using ValidateStruct
 
-	// Validate menu item exists and is available
-	menuItem, err := s.menuService.GetMenuItem(itemID)
+	// Validate menu item exists and is available (BUSINESS LOGIC)
+	menuItem, err := s.menuService.GetMenuItem(ctx, itemID)
 	if err != nil {
-		return errors.New("menu item not found")
+		return nil, errors.New("menu item not found")
 	}
-	if menuItem.AvalabilityStatus != "available" {
-		return errors.New("menu item is unavailable")
+	if menuItem.AvalabilityStatus != "in_stock" {
+		return nil, errors.New("menu item is out of stock")
 	}
 
 	// Create order item with generated UUID
@@ -115,26 +96,30 @@ func (s *orderService) CreateOrderItem(itemID uuid.UUID, quantity int, orderID u
 		OrderID:    orderID,
 	}
 	// Persist order item in repository
-	return s.repo.CreateOrderItem(Item)
+	err = s.repo.CreateOrderItem(ctx, Item)
+	if err != nil {
+		return nil, err
+	}
+	return Item, nil
 }
 
 // GetOrderItems retrieves order items by order ID with validation
-func (s *orderService) GetOrderItems(orderID uuid.UUID) ([]*models.OrderItems, error) {
+func (s *orderService) GetOrderItems(ctx context.Context, orderID uuid.UUID) ([]*models.OrderItems, error) {
 	// Retrieve order items from repository
-	return s.repo.GetOrderItems(orderID)
+	return s.repo.GetOrderItems(ctx, orderID)
 }
 
 // GetOrdersBySession retrieves orders by session ID with validation
-func (s *orderService) GetOrdersBySession(sessionID uuid.UUID) ([]*models.Order, error) {
+func (s *orderService) GetOrdersBySession(ctx context.Context, sessionID uuid.UUID) ([]*models.Order, error) {
 	// Retrieve orders from repository
-	return s.repo.GetOrdersBySession(sessionID)
+	return s.repo.GetOrdersBySession(ctx, sessionID)
 }
 
 // GetOrderItemsBySessionID retrieves order items by session ID
 // by orchestrating multiple repository calls
-func (s *orderService) GetOrderItemsBySessionID(sessionID uuid.UUID) ([]*models.OrderItems, error) {
+func (s *orderService) GetOrderItemsBySessionID(ctx context.Context, sessionID uuid.UUID) ([]*models.OrderItems, error) {
 	// Step 1: Get all orders for the session
-	orders, err := s.repo.GetOrdersBySession(sessionID)
+	orders, err := s.repo.GetOrdersBySession(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -151,5 +136,5 @@ func (s *orderService) GetOrderItemsBySessionID(sessionID uuid.UUID) ([]*models.
 	}
 
 	// Step 3: Get all order items for these orders
-	return s.repo.GetOrderItemsByOrderIDs(orderIDs)
+	return s.repo.GetOrderItemsByOrderIDs(ctx, orderIDs)
 }

@@ -11,7 +11,7 @@ type MenuItem struct {
 	Name              string     // name of the menu item
 	Description       string     // description of the menu item
 	Price             float64    // price of the menu item
-	Category          string     // category of the menu item
+	CategoryID        uuid.UUID  // category of the menu item
 	AvalabilityStatus ItemStatus // status of the menu item in stock (e.g., "in_stock", "out_of_stock")
 	CreatedAt         time.Time  // when the menu item was created
 }
@@ -26,4 +26,9 @@ const (
 type category struct {
 	ID   uuid.UUID // unique category ID
 	Name string    // name of the category
+}
+
+type Category struct {
+	ID   uuid.UUID `json:"id"`   // unique category ID
+	Name string    `json:"name"` // name of the category
 }

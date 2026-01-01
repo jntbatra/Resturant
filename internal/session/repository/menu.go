@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"restaurant/internal/session/models"
@@ -11,28 +12,37 @@ import (
 // MenuRepository defines methods for menu item database operations
 type MenuRepository interface {
 	// CreateMenuItem creates a new menu item
-	CreateMenuItem(item *models.MenuItem) error
+	CreateMenuItem(ctx context.Context, item *models.MenuItem) error
 
 	// GetMenuItem retrieves a menu item by ID
-	GetMenuItem(id uuid.UUID) (*models.MenuItem, error)
+	GetMenuItem(ctx context.Context, id uuid.UUID) (*models.MenuItem, error)
 
 	// ListMenuItems lists all menu items
-	ListMenuItems() ([]*models.MenuItem, error)
+	ListMenuItems(ctx context.Context, offset int, limit int) ([]*models.MenuItem, error)
 
 	// GetMenuItemsByCategory retrieves menu items by category
-	GetMenuItemsByCategory(category string) ([]*models.MenuItem, error)
+	GetMenuItemsByCategory(ctx context.Context, category string) ([]*models.MenuItem, error)
 
 	// UpdateMenuItem updates a menu item
-	UpdateMenuItem(item *models.MenuItem) error
+	UpdateMenuItem(ctx context.Context, item *models.MenuItem) error
 
 	// DeleteMenuItem deletes a menu item by ID
-	DeleteMenuItem(id uuid.UUID) error
+	DeleteMenuItem(ctx context.Context, id uuid.UUID) error
 
 	// ListCategories lists all unique categories
-	ListCategories() ([]string, error)
+	ListCategories(ctx context.Context) ([]models.Category, error)
 
 	// CreateCategory creates a new category
-	CreateCategory(name string) error
+	CreateCategory(ctx context.Context, name string, id uuid.UUID) error
+
+	// DeleteCategory deletes a category
+	DeleteCategory(ctx context.Context, name string) error
+
+	UpdateCategory(ctx context.Context, old_name string, new_name string) error
+
+	CategoryIDByName(ctx context.Context, name string) (uuid.UUID, error)
+
+	CategoryIDByNameCareateIfNotPresent(ctx context.Context, name string) (uuid.UUID, error)
 }
 
 // ErrMenuItemNotFound is returned when a menu item is not found
@@ -49,16 +59,16 @@ func NewMenuRepository(db *sql.DB) MenuRepository {
 }
 
 // Implementations (stubs for now)
-func (r *postgresMenuRepository) CreateMenuItem(item *models.MenuItem) error {
-	_, err := r.db.Exec("INSERT INTO menu_items (id, name, description, price, avalability_status, category, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
-		item.ID.String(), item.Name, item.Description, item.Price, item.AvalabilityStatus, item.Category, item.CreatedAt)
+func (r *postgresMenuRepository) CreateMenuItem(ctx context.Context, item *models.MenuItem) error {
+	_, err := r.db.ExecContext(ctx, "INSERT INTO menu_items (id, name, description, price, avalability_status, category, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+		item.ID, item.Name, item.Description, item.Price, item.AvalabilityStatus, item.CategoryID, item.CreatedAt)
 	return err
 }
 
-func (r *postgresMenuRepository) GetMenuItem(id uuid.UUID) (*models.MenuItem, error) {
+func (r *postgresMenuRepository) GetMenuItem(ctx context.Context, id uuid.UUID) (*models.MenuItem, error) {
 	var item models.MenuItem
-	err := r.db.QueryRow("SELECT id, name, description, price, avalability_status, category, created_at FROM menu_items WHERE id = $1", id.String()).Scan(
-		&item.ID, &item.Name, &item.Description, &item.Price, &item.AvalabilityStatus, &item.Category, &item.CreatedAt)
+	err := r.db.QueryRowContext(ctx, "SELECT id, name, description, price, avalability_status, category, created_at FROM menu_items WHERE id = $1", id).Scan(
+		&item.ID, &item.Name, &item.Description, &item.Price, &item.AvalabilityStatus, &item.CategoryID, &item.CreatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrMenuItemNotFound
@@ -68,9 +78,9 @@ func (r *postgresMenuRepository) GetMenuItem(id uuid.UUID) (*models.MenuItem, er
 	return &item, nil
 }
 
-func (r *postgresMenuRepository) ListMenuItems() ([]*models.MenuItem, error) {
+func (r *postgresMenuRepository) ListMenuItems(ctx context.Context, offset int, limit int) ([]*models.MenuItem, error) {
 	// TODO: Consider adding pagination (limit, offset) and availability filter for production use
-	rows, err := r.db.Query("SELECT id, name, description, price, avalability_status, category, created_at FROM menu_items")
+	rows, err := r.db.QueryContext(ctx, "SELECT id, name, description, price, avalability_status, category, created_at FROM menu_items ORDER BY created_at DESC OFFSET $1 LIMIT $2", offset, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +89,7 @@ func (r *postgresMenuRepository) ListMenuItems() ([]*models.MenuItem, error) {
 	var items []*models.MenuItem
 	for rows.Next() {
 		var item models.MenuItem
-		err := rows.Scan(&item.ID, &item.Name, &item.Description, &item.Price, &item.AvalabilityStatus, &item.Category, &item.CreatedAt)
+		err := rows.Scan(&item.ID, &item.Name, &item.Description, &item.Price, &item.AvalabilityStatus, &item.CategoryID, &item.CreatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -91,8 +101,8 @@ func (r *postgresMenuRepository) ListMenuItems() ([]*models.MenuItem, error) {
 	return items, nil
 }
 
-func (r *postgresMenuRepository) GetMenuItemsByCategory(category string) ([]*models.MenuItem, error) {
-	rows, err := r.db.Query("SELECT id, name, description, price, avalability_status, category, created_at FROM menu_items WHERE category = $1", category)
+func (r *postgresMenuRepository) GetMenuItemsByCategory(ctx context.Context, category string) ([]*models.MenuItem, error) {
+	rows, err := r.db.QueryContext(ctx, "SELECT id, name, description, price, avalability_status, category, created_at FROM menu_items WHERE category = $1", category)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +111,7 @@ func (r *postgresMenuRepository) GetMenuItemsByCategory(category string) ([]*mod
 	var items []*models.MenuItem
 	for rows.Next() {
 		var item models.MenuItem
-		err := rows.Scan(&item.ID, &item.Name, &item.Description, &item.Price, &item.AvalabilityStatus, &item.Category, &item.CreatedAt)
+		err := rows.Scan(&item.ID, &item.Name, &item.Description, &item.Price, &item.AvalabilityStatus, &item.CategoryID, &item.CreatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -113,28 +123,28 @@ func (r *postgresMenuRepository) GetMenuItemsByCategory(category string) ([]*mod
 	return items, nil
 }
 
-func (r *postgresMenuRepository) UpdateMenuItem(item *models.MenuItem) error {
-	_, err := r.db.Exec("UPDATE menu_items SET name = $1, description = $2, price = $3, avalability_status = $4, category = $5 WHERE id = $6",
-		item.Name, item.Description, item.Price, item.AvalabilityStatus, item.Category, item.ID.String())
+func (r *postgresMenuRepository) UpdateMenuItem(ctx context.Context, item *models.MenuItem) error {
+	_, err := r.db.ExecContext(ctx, "UPDATE menu_items SET name = $1, description = $2, price = $3, avalability_status = $4, category = $5 WHERE id = $6",
+		item.Name, item.Description, item.Price, item.AvalabilityStatus, item.CategoryID, item.ID)
 	return err
 }
 
-func (r *postgresMenuRepository) DeleteMenuItem(id uuid.UUID) error {
-	_, err := r.db.Exec("DELETE FROM menu_items WHERE id = $1", id.String())
+func (r *postgresMenuRepository) DeleteMenuItem(ctx context.Context, id uuid.UUID) error {
+	_, err := r.db.ExecContext(ctx, "DELETE FROM menu_items WHERE id = $1", id)
 	return err
 }
 
-func (r *postgresMenuRepository) ListCategories() ([]string, error) {
-	rows, err := r.db.Query("SELECT name FROM categories ORDER BY name")
+func (r *postgresMenuRepository) ListCategories(ctx context.Context) ([]models.Category, error) {
+	rows, err := r.db.QueryContext(ctx, "SELECT (id, name)  FROM categories ORDER BY name")
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var categories []string
+	var categories []models.Category
 	for rows.Next() {
-		var category string
-		err := rows.Scan(&category)
+		var category models.Category
+		err := rows.Scan(&category.ID, &category.Name)
 		if err != nil {
 			return nil, err
 		}
@@ -146,8 +156,45 @@ func (r *postgresMenuRepository) ListCategories() ([]string, error) {
 	return categories, nil
 }
 
-func (r *postgresMenuRepository) CreateCategory(name string) error {
-	id := uuid.New()
-	_, err := r.db.Exec("INSERT INTO categories (id, name) VALUES ($1, $2)", id.String(), name)
+func (r *postgresMenuRepository) CreateCategory(ctx context.Context, name string, id uuid.UUID) error {
+	_, err := r.db.ExecContext(ctx, "INSERT INTO categories (id, name) VALUES ($1, $2)", id, name)
 	return err
+}
+
+// UpdateCategory updates an existing category name
+func (r *postgresMenuRepository) UpdateCategory(ctx context.Context, old_name string, new_name string) error {
+	_, err := r.db.ExecContext(ctx, "UPDATE categories SET name = $1 WHERE name = $2", new_name, old_name)
+	return err
+}
+
+func (r *postgresMenuRepository) DeleteCategory(ctx context.Context, name string) error {
+	// Database foreign key constraint will prevent deletion if category is in use
+	// If deletion fails due to constraint, error will be returned automatically
+	_, err := r.db.ExecContext(ctx, "DELETE FROM categories WHERE name = $1", name)
+	return err
+}
+
+func (r *postgresMenuRepository) CategoryIDByName(ctx context.Context, name string) (uuid.UUID, error) {
+	var id uuid.UUID
+	err := r.db.QueryRowContext(ctx, "SELECT id FROM categories WHERE name = $1", name).Scan(&id)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return id, nil
+}
+
+func (r *postgresMenuRepository) CategoryIDByNameCareateIfNotPresent(ctx context.Context, name string) (uuid.UUID, error) {
+	id, err := r.CategoryIDByName(ctx, name)
+	if err == sql.ErrNoRows {
+		// Create new category
+		newID := uuid.New()
+		err = r.CreateCategory(ctx, name, newID)
+		if err != nil {
+			return uuid.Nil, err
+		}
+		return newID, nil
+	} else if err != nil {
+		return uuid.Nil, err
+	}
+	return id, nil
 }

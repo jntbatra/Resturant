@@ -3,9 +3,10 @@ package main
 import (
 	"database/sql"
 	"log"
-	"net/http"
 
 	_ "github.com/lib/pq"
+
+	"github.com/gin-gonic/gin"
 
 	"restaurant/internal/session/handler"
 	"restaurant/internal/session/repository"
@@ -41,26 +42,17 @@ func main() {
 	orderHandler := handler.NewOrderHandler(orderService)
 	sessionHandler := handler.NewHandler(sessionService)
 
-	// Setup routes
-	mux := http.NewServeMux()
+	// Setup Gin router
+	router := gin.Default()
 
-	// Menu routes
-	mux.HandleFunc("/menu", menuHandler.ListMenuItems)
-	mux.HandleFunc("/menu/create", menuHandler.CreateMenuItem)
-	mux.HandleFunc("/menu/item", menuHandler.GetMenuItem)
-
-	// Order routes
-	mux.HandleFunc("/orders", orderHandler.ListOrders)
-	mux.HandleFunc("/orders/create", orderHandler.CreateOrder)
-	mux.HandleFunc("/orders/item", orderHandler.GetOrder)
-
-	// Session routes
-	mux.HandleFunc("/sessions", sessionHandler.ListSessions)
-	mux.HandleFunc("/sessions/create", sessionHandler.CreateSession)
+	// Register routes from each handler
+	menuHandler.RegisterRoutes(router)
+	orderHandler.RegisterRoutes(router)
+	sessionHandler.RegisterRoutes(router)
 
 	// Start server
 	log.Println("Server starting on :8080")
-	if err := http.ListenAndServe(":8080", mux); err != nil {
+	if err := router.Run(":8080"); err != nil {
 		log.Fatal("Server failed:", err)
 	}
 }
