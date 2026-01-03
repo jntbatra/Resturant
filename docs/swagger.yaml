@@ -1,0 +1,1311 @@
+basePath: /
+definitions:
+  middleware.ErrorResponse:
+    properties:
+      error:
+        type: string
+      status:
+        type: integer
+    type: object
+  models.Category:
+    properties:
+      id:
+        description: unique category ID
+        type: string
+      name:
+        description: name of the category
+        type: string
+    type: object
+  models.ItemStatus:
+    enum:
+    - in_stock
+    - out_of_stock
+    type: string
+    x-enum-varnames:
+    - ItemStatusInStock
+    - ItemStatusOutOfStock
+  models.MenuItem:
+    properties:
+      avalabilityStatus:
+        allOf:
+        - $ref: '#/definitions/models.ItemStatus'
+        description: status of the menu item in stock (e.g., "in_stock", "out_of_stock")
+      categoryID:
+        description: category of the menu item
+        type: string
+      createdAt:
+        description: when the menu item was created
+        type: string
+      description:
+        description: description of the menu item
+        type: string
+      id:
+        description: unique menu item ID
+        type: string
+      name:
+        description: name of the menu item
+        type: string
+      price:
+        description: price of the menu item
+        format: float64
+        type: number
+    type: object
+  models.Order:
+    properties:
+      createdAt:
+        description: when the order was created
+        type: string
+      id:
+        description: unique order ID
+        type: string
+      sessionID:
+        description: associated session ID
+        type: string
+      status:
+        allOf:
+        - $ref: '#/definitions/models.OrderStatus'
+        description: e.g., OrderStatusPending, OrderStatusPreparing, etc.
+    type: object
+  models.OrderItems:
+    properties:
+      id:
+        description: unique order ID
+        type: string
+      menuItemID:
+        description: associated menu item ID
+        type: string
+      orderID:
+        description: associated order ID
+        type: string
+      quantity:
+        description: quantity of the menu item in the order
+        type: integer
+    type: object
+  models.OrderStatus:
+    enum:
+    - cart
+    - pending
+    - preparing
+    - served
+    - cancelled
+    type: string
+    x-enum-varnames:
+    - OrderStatusCart
+    - OrderStatusPending
+    - OrderStatusPreparing
+    - OrderStatusServed
+    - OrderStatusCancelled
+  models.Session:
+    properties:
+      completedAt:
+        description: when the session was completed, nil if not completed
+        type: string
+      createdAt:
+        description: when the session was created
+        type: string
+      id:
+        description: unique session ID (UUID)
+        type: string
+      status:
+        allOf:
+        - $ref: '#/definitions/models.SessionStatus'
+        description: e.g., StatusActive, StatusCompleted, or StatusPending
+      tableID:
+        description: which table this session is for
+        type: integer
+    type: object
+  models.SessionStatus:
+    enum:
+    - active
+    - completed
+    - pending
+    - cancelled
+    type: string
+    x-enum-varnames:
+    - StatusActive
+    - StatusCompleted
+    - StatusPending
+    - StatusCancelled
+  models.Table:
+    properties:
+      id:
+        description: table number (primary key)
+        type: integer
+    type: object
+  validation.ChangeSessionTableRequest:
+    properties:
+      table_id:
+        type: integer
+    required:
+    - table_id
+    type: object
+  validation.CreateCategoryRequest:
+    properties:
+      name:
+        maxLength: 100
+        minLength: 1
+        type: string
+    required:
+    - name
+    type: object
+  validation.CreateMenuItemRequest:
+    properties:
+      category:
+        maxLength: 100
+        minLength: 1
+        type: string
+      description:
+        maxLength: 1000
+        type: string
+      name:
+        maxLength: 255
+        minLength: 1
+        type: string
+      price:
+        type: number
+      status:
+        enum:
+        - available
+        - unavailable
+        - discontinued
+        type: string
+    required:
+    - category
+    - name
+    - price
+    - status
+    type: object
+  validation.CreateOrderItemRequest:
+    properties:
+      menu_item_id:
+        type: string
+      order_id:
+        type: string
+      quantity:
+        type: integer
+    required:
+    - menu_item_id
+    - order_id
+    - quantity
+    type: object
+  validation.CreateOrderRequest:
+    properties:
+      session_id:
+        type: string
+    required:
+    - session_id
+    type: object
+  validation.CreateSessionRequest:
+    properties:
+      table_id:
+        type: integer
+    required:
+    - table_id
+    type: object
+  validation.CreateTableRequest:
+    properties:
+      id:
+        minimum: 1
+        type: integer
+    required:
+    - id
+    type: object
+  validation.UpdateCategoryRequest:
+    properties:
+      name:
+        maxLength: 100
+        minLength: 1
+        type: string
+    required:
+    - name
+    type: object
+  validation.UpdateMenuItemRequest:
+    properties:
+      category:
+        maxLength: 100
+        minLength: 1
+        type: string
+      description:
+        maxLength: 1000
+        type: string
+      name:
+        maxLength: 255
+        minLength: 1
+        type: string
+      price:
+        type: number
+    type: object
+  validation.UpdateOrderRequest:
+    properties:
+      status:
+        allOf:
+        - $ref: '#/definitions/models.OrderStatus'
+        enum:
+        - cart
+        - pending
+        - preparing
+        - served
+        - cancelled
+    required:
+    - status
+    type: object
+  validation.UpdateSessionRequest:
+    properties:
+      status:
+        allOf:
+        - $ref: '#/definitions/models.SessionStatus'
+        enum:
+        - active
+        - completed
+        - pending
+        - cancelled
+    required:
+    - status
+    type: object
+  validation.UpdateTableRequest:
+    properties:
+      id:
+        minimum: 1
+        type: integer
+    required:
+    - id
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: support@example.com
+    name: API Support
+    url: http://example.com/support
+  description: Restaurant management system with sessions, menus, and orders
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  termsOfService: http://example.com/terms
+  title: Restaurant Management API
+  version: "1.0"
+paths:
+  /menu:
+    get:
+      consumes:
+      - application/json
+      description: List all menu items with optional filtering and pagination
+      parameters:
+      - description: Offset (default 0)
+        in: query
+        name: offset
+        type: integer
+      - description: Limit (default 10, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Filter by category
+        in: query
+        name: category
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.MenuItem'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      summary: List menu items
+      tags:
+      - Menu
+    post:
+      consumes:
+      - application/json
+      description: Create a new menu item
+      parameters:
+      - description: Menu item creation request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/validation.CreateMenuItemRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.MenuItem'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      summary: Create menu item
+      tags:
+      - Menu
+  /menu/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete a menu item
+      parameters:
+      - description: Menu Item ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      summary: Delete menu item
+      tags:
+      - Menu
+    get:
+      consumes:
+      - application/json
+      description: Retrieve a specific menu item by ID
+      parameters:
+      - description: Menu Item ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.MenuItem'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      summary: Get menu item
+      tags:
+      - Menu
+    put:
+      consumes:
+      - application/json
+      description: Update an existing menu item
+      parameters:
+      - description: Menu Item ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Menu item update request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/validation.UpdateMenuItemRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      summary: Update menu item
+      tags:
+      - Menu
+  /menu/categories:
+    get:
+      consumes:
+      - application/json
+      description: List all menu categories
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Category'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      summary: List categories
+      tags:
+      - Menu
+    post:
+      consumes:
+      - application/json
+      description: Create a new menu category
+      parameters:
+      - description: Category creation request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/validation.CreateCategoryRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.Category'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      summary: Create a new category
+      tags:
+      - Menu
+  /menu/categories/{name}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete a menu category
+      parameters:
+      - description: Category name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      summary: Delete category
+      tags:
+      - Menu
+    get:
+      consumes:
+      - application/json
+      description: Get category ID by name
+      parameters:
+      - description: Category name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      summary: Get category by name
+      tags:
+      - Menu
+    put:
+      consumes:
+      - application/json
+      description: Update an existing category
+      parameters:
+      - description: Current category name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Category update request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/validation.UpdateCategoryRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Category'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      summary: Update category
+      tags:
+      - Menu
+  /menu/categories/{name}/id:
+    get:
+      consumes:
+      - application/json
+      description: Get category ID by name
+      parameters:
+      - description: Category name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      summary: Get category ID by name
+      tags:
+      - Menu
+  /menu/categories/{name}/id_or_create:
+    get:
+      consumes:
+      - application/json
+      description: Get category ID by name, create if not exists
+      parameters:
+      - description: Category name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      summary: Get category ID or create
+      tags:
+      - Menu
+  /orders:
+    get:
+      consumes:
+      - application/json
+      description: List all orders with pagination
+      parameters:
+      - description: Offset (default 0)
+        in: query
+        name: offset
+        type: integer
+      - description: Limit (default 10, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Filter by session ID
+        in: query
+        name: session_id
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Order'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      summary: List orders
+      tags:
+      - Orders
+    post:
+      consumes:
+      - application/json
+      description: Create a new order for a session
+      parameters:
+      - description: Order creation request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/validation.CreateOrderRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.Order'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      summary: Create order
+      tags:
+      - Orders
+  /orders/{id}:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve a specific order by ID
+      parameters:
+      - description: Order ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Order'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      summary: Get order
+      tags:
+      - Orders
+    put:
+      consumes:
+      - application/json
+      description: Update the status of an order
+      parameters:
+      - description: Order ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Status update request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/validation.UpdateOrderRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      summary: Update order status
+      tags:
+      - Orders
+  /orders/{id}/items:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve all items in an order
+      parameters:
+      - description: Order ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.OrderItems'
+            type: array
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      summary: Get order items
+      tags:
+      - Orders
+    post:
+      consumes:
+      - application/json
+      description: Add a menu item to an order
+      parameters:
+      - description: Order ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Order item creation request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/validation.CreateOrderItemRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.OrderItems'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      summary: Add item to order
+      tags:
+      - Orders
+  /sessions:
+    get:
+      consumes:
+      - application/json
+      description: List all sessions with pagination
+      parameters:
+      - description: Offset (default 0)
+        in: query
+        name: offset
+        type: integer
+      - description: Limit (default 10, max 100)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Session'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      summary: List sessions
+      tags:
+      - Sessions
+    post:
+      consumes:
+      - application/json
+      description: Create a new dining session for a table
+      parameters:
+      - description: Session creation request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/validation.CreateSessionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Session'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      summary: Create a new session
+      tags:
+      - Sessions
+  /sessions/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete a session by ID
+      parameters:
+      - description: Session ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      summary: Delete a session
+      tags:
+      - Sessions
+    get:
+      consumes:
+      - application/json
+      description: Retrieve a specific session by its ID
+      parameters:
+      - description: Session ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Session'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      summary: Get session by ID
+      tags:
+      - Sessions
+    put:
+      consumes:
+      - application/json
+      description: Update the status of a session
+      parameters:
+      - description: Session ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Status update request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/validation.UpdateSessionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Session'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      summary: Update session status
+      tags:
+      - Sessions
+  /sessions/{id}/order-items:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve all order items for a specific session
+      parameters:
+      - description: Session ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.OrderItems'
+            type: array
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      summary: Get order items for session
+      tags:
+      - Orders
+  /sessions/{id}/orders:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve all orders for a specific session
+      parameters:
+      - description: Session ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Order'
+            type: array
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      summary: Get orders for session
+      tags:
+      - Orders
+  /sessions/{id}/table:
+    put:
+      consumes:
+      - application/json
+      description: Change the table assignment for a session
+      parameters:
+      - description: Session ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Table change request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/validation.ChangeSessionTableRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      summary: Change session table
+      tags:
+      - Sessions
+  /sessions/table/{tableID}:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve all sessions for a specific table
+      parameters:
+      - description: Table ID
+        in: path
+        name: tableID
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Session'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      summary: Get sessions for a table
+      tags:
+      - Sessions
+  /tables:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve all restaurant tables
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Table'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      summary: List all tables
+      tags:
+      - Tables
+    post:
+      consumes:
+      - application/json
+      description: Create a new restaurant table
+      parameters:
+      - description: Table creation request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/validation.CreateTableRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.Table'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      summary: Create a new table
+      tags:
+      - Tables
+  /tables/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete a restaurant table (only if no active sessions)
+      parameters:
+      - description: Table ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      summary: Delete a table
+      tags:
+      - Tables
+    get:
+      consumes:
+      - application/json
+      description: Retrieve a specific table by its ID
+      parameters:
+      - description: Table ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Table'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      summary: Get table by ID
+      tags:
+      - Tables
+    put:
+      consumes:
+      - application/json
+      description: Update an existing restaurant table
+      parameters:
+      - description: Table ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Table update request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/validation.UpdateTableRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Table'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      summary: Update a table
+      tags:
+      - Tables
+swagger: "2.0"

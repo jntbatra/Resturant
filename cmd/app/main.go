@@ -1,15 +1,33 @@
 package main
 
+// @title Restaurant Management API
+// @version 1.0
+// @description Restaurant management system with sessions, menus, and orders
+// @termsOfService http://example.com/terms
+// @contact.name API Support
+// @contact.url http://example.com/support
+// @contact.email support@example.com
+// @license.name MIT
+// @license.url https://opensource.org/licenses/MIT
+// @host localhost:8080
+// @BasePath /
+
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	_ "github.com/lib/pq"
 
 	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
+
+	_ "restaurant/docs"
 
 	"restaurant/internal/middleware"
 	"restaurant/internal/pool"
@@ -23,8 +41,36 @@ func main() {
 	// Initialize shutdown manager
 	shutdownMgr := shutdown.NewManager(30 * time.Second)
 
-	// Database connection
-	connStr := "postgres://username:password@localhost/restaurant?sslmode=disable"
+	// Database connection string from environment variables
+	dbHost := os.Getenv("DB_HOST")
+	if dbHost == "" {
+		dbHost = "localhost"
+	}
+	dbPort := os.Getenv("DB_PORT")
+	if dbPort == "" {
+		dbPort = "5432"
+	}
+	dbUser := os.Getenv("DB_USER")
+	if dbUser == "" {
+		dbUser = "restaurant"
+	}
+	dbPassword := os.Getenv("DB_PASSWORD")
+	if dbPassword == "" {
+		dbPassword = "restaurant_password"
+	}
+	dbName := os.Getenv("DB_NAME")
+	if dbName == "" {
+		dbName = "restaurant"
+	}
+	dbSSLMode := os.Getenv("DB_SSLMODE")
+	if dbSSLMode == "" {
+		dbSSLMode = "disable"
+	}
+
+	connStr := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s",
+		dbUser, dbPassword, dbHost, dbPort, dbName, dbSSLMode)
+
+	log.Printf("Connecting to database: %s@%s:%s/%s", dbUser, dbHost, dbPort, dbName)
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
 		log.Fatal("Failed to connect to database:", err)
@@ -90,19 +136,12 @@ func main() {
 	})
 	router.Use(middleware.RateLimitMiddleware())
 
-	// API Documentation endpoint
+	// API Documentation endpoint - Swagger UI
+	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
+	// Redirect /docs to Swagger UI
 	router.GET("/docs", func(c *gin.Context) {
-		c.JSON(200, gin.H{
-			"title":       "Restaurant Management API",
-			"version":     "1.0",
-			"description": "Restaurant management system with sessions, menus, and orders",
-			"docs_url":    "See internal/docs/docs.go for OpenAPI/Swagger documentation",
-			"endpoints": gin.H{
-				"sessions": "/sessions",
-				"menus":    "/menu",
-				"orders":   "/orders",
-			},
-		})
+		c.Redirect(http.StatusMovedPermanently, "/swagger/index.html")
 	})
 
 	// Register routes from each handler

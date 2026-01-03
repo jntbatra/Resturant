@@ -40,6 +40,16 @@ func (h *OrderHandler) RegisterRoutes(router *gin.Engine) {
 }
 
 // CreateOrder handles POST /orders
+// @Summary Create order
+// @Description Create a new order for a session
+// @Tags Orders
+// @Accept json
+// @Produce json
+// @Param request body validation.CreateOrderRequest true "Order creation request"
+// @Success 201 {object} models.Order
+// @Failure 400 {object} middleware.ErrorResponse
+// @Failure 500 {object} middleware.ErrorResponse
+// @Router /orders [post]
 func (h *OrderHandler) CreateOrder(c *gin.Context) {
 	var req validation.CreateOrderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -62,6 +72,16 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 }
 
 // GetOrder handles GET /orders/:id
+// @Summary Get order
+// @Description Retrieve a specific order by ID
+// @Tags Orders
+// @Accept json
+// @Produce json
+// @Param id path string true "Order ID (UUID)"
+// @Success 200 {object} models.Order
+// @Failure 404 {object} middleware.ErrorResponse
+// @Failure 500 {object} middleware.ErrorResponse
+// @Router /orders/{id} [get]
 func (h *OrderHandler) GetOrder(c *gin.Context) {
 	id, ok := middleware.UUIDParam(c, "id")
 	if !ok {
@@ -78,6 +98,18 @@ func (h *OrderHandler) GetOrder(c *gin.Context) {
 }
 
 // ListOrders handles GET /orders
+// @Summary List orders
+// @Description List all orders with pagination
+// @Tags Orders
+// @Accept json
+// @Produce json
+// @Param offset query int false "Offset (default 0)"
+// @Param limit query int false "Limit (default 10, max 100)"
+// @Param session_id query string false "Filter by session ID"
+// @Success 200 {array} models.Order
+// @Failure 400 {object} middleware.ErrorResponse
+// @Failure 500 {object} middleware.ErrorResponse
+// @Router /orders [get]
 func (h *OrderHandler) ListOrders(c *gin.Context) {
 	var req validation.ListOrdersRequest
 
@@ -109,6 +141,17 @@ func (h *OrderHandler) ListOrders(c *gin.Context) {
 }
 
 // UpdateOrder handles PUT /orders/:id
+// @Summary Update order status
+// @Description Update the status of an order
+// @Tags Orders
+// @Accept json
+// @Produce json
+// @Param id path string true "Order ID (UUID)"
+// @Param request body validation.UpdateOrderRequest true "Status update request"
+// @Success 200 {object} map[string]string
+// @Failure 400 {object} middleware.ErrorResponse
+// @Failure 500 {object} middleware.ErrorResponse
+// @Router /orders/{id} [put]
 func (h *OrderHandler) UpdateOrder(c *gin.Context) {
 	id, ok := middleware.UUIDParam(c, "id")
 	if !ok {
@@ -136,6 +179,17 @@ func (h *OrderHandler) UpdateOrder(c *gin.Context) {
 }
 
 // CreateOrderItem handles POST /orders/:id/items
+// @Summary Add item to order
+// @Description Add a menu item to an order
+// @Tags Orders
+// @Accept json
+// @Produce json
+// @Param id path string true "Order ID (UUID)"
+// @Param request body validation.CreateOrderItemRequest true "Order item creation request"
+// @Success 201 {object} models.OrderItems
+// @Failure 400 {object} middleware.ErrorResponse
+// @Failure 500 {object} middleware.ErrorResponse
+// @Router /orders/{id}/items [post]
 func (h *OrderHandler) CreateOrderItem(c *gin.Context) {
 	var req validation.CreateOrderItemRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -158,6 +212,16 @@ func (h *OrderHandler) CreateOrderItem(c *gin.Context) {
 }
 
 // GetOrderItems handles GET /orders/:id/items
+// @Summary Get order items
+// @Description Retrieve all items in an order
+// @Tags Orders
+// @Accept json
+// @Produce json
+// @Param id path string true "Order ID (UUID)"
+// @Success 200 {array} models.OrderItems
+// @Failure 404 {object} middleware.ErrorResponse
+// @Failure 500 {object} middleware.ErrorResponse
+// @Router /orders/{id}/items [get]
 func (h *OrderHandler) GetOrderItems(c *gin.Context) {
 	id, ok := middleware.UUIDParam(c, "id")
 	if !ok {
@@ -174,6 +238,16 @@ func (h *OrderHandler) GetOrderItems(c *gin.Context) {
 }
 
 // GetOrdersBySession handles GET /sessions/:id/orders
+// @Summary Get orders for session
+// @Description Retrieve all orders for a specific session
+// @Tags Orders
+// @Accept json
+// @Produce json
+// @Param id path string true "Session ID (UUID)"
+// @Success 200 {array} models.Order
+// @Failure 404 {object} middleware.ErrorResponse
+// @Failure 500 {object} middleware.ErrorResponse
+// @Router /sessions/{id}/orders [get]
 func (h *OrderHandler) GetOrdersBySession(c *gin.Context) {
 	id, ok := middleware.UUIDParam(c, "id")
 	if !ok {
@@ -190,6 +264,16 @@ func (h *OrderHandler) GetOrdersBySession(c *gin.Context) {
 }
 
 // GetOrderItemsBySessionIDs handles GET /sessions/:id/order-items
+// @Summary Get order items for session
+// @Description Retrieve all order items for a specific session
+// @Tags Orders
+// @Accept json
+// @Produce json
+// @Param id path string true "Session ID (UUID)"
+// @Success 200 {array} models.OrderItems
+// @Failure 404 {object} middleware.ErrorResponse
+// @Failure 500 {object} middleware.ErrorResponse
+// @Router /sessions/{id}/order-items [get]
 func (h *OrderHandler) GetOrderItemsBySessionIDs(c *gin.Context) {
 	id, ok := middleware.UUIDParam(c, "id")
 	if !ok {

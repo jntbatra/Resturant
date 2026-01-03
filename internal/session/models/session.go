@@ -25,12 +25,6 @@ type Session struct {
 	Status      SessionStatus // e.g., StatusActive, StatusCompleted, or StatusPending
 }
 
-type Table struct {
-	ID        uuid.UUID // unique table ID
-	Number    int       // table number in the restaurant
-	CreatedAt time.Time // when the table was created
-}
-
 type Bill struct {
 	ID        uuid.UUID
 	SessionID uuid.UUID
@@ -38,4 +32,19 @@ type Bill struct {
 	Subtotal  float64
 	Tax       float64
 	CreatedAt time.Time
+}
+
+// Table represents a physical table in the restaurant
+type Table struct {
+	ID int `json:"id" db:"id"` // table number (primary key)
+}
+
+// CreateTableRequest represents the request to create a new table
+type CreateTableRequest struct {
+	ID int `json:"id" validate:"required,min=1" db:"id"`
+}
+
+// UpdateTableRequest represents the request to update an existing table
+type UpdateTableRequest struct {
+	ID int `json:"id" validate:"required,min=1" db:"id"`
 }

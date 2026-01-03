@@ -163,6 +163,7 @@ func CORSMiddleware() gin.HandlerFunc {
 	allowedOrigins := []string{
 		"http://localhost:3000",
 		"http://localhost:5173", // Vite default
+		"http://localhost:8080",
 		"https://yourdomain.com",
 	}
 

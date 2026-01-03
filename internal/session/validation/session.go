@@ -55,3 +55,31 @@ func ValidateSessionID(id uuid.UUID) error {
 	}
 	return nil
 }
+
+// CreateTableRequest represents the request to create a table
+type CreateTableRequest struct {
+	ID int `json:"id" validate:"required,min=1"`
+}
+
+// UpdateTableRequest represents the request to update a table
+type UpdateTableRequest struct {
+	ID int `json:"id" validate:"required,min=1"`
+}
+
+// ValidateCreateTable validates the create table request
+func ValidateCreateTable(req CreateTableRequest) error {
+	return ValidateStruct(req)
+}
+
+// ValidateUpdateTable validates the update table request
+func ValidateUpdateTable(req UpdateTableRequest) error {
+	return ValidateStruct(req)
+}
+
+// ValidateTableID validates a table ID
+func ValidateTableID(id int) error {
+	if id <= 0 {
+		return errors.New("invalid table ID")
+	}
+	return nil
+}

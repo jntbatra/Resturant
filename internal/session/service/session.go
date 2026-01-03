@@ -21,6 +21,14 @@ type SessionService interface {
 	GetSessionsByTable(ctx context.Context, tableID int) ([]*models.Session, error)
 	GetActiveSessionsByTable(ctx context.Context, tableID int) ([]*models.Session, error)
 	DeleteSession(ctx context.Context, id uuid.UUID) error
+
+	// Table operations
+	CreateTable(ctx context.Context, req *models.CreateTableRequest) (*models.Table, error)
+	GetTable(ctx context.Context, id int) (*models.Table, error)
+	GetTableByNumber(ctx context.Context, number int) (*models.Table, error)
+	ListTables(ctx context.Context) ([]*models.Table, error)
+	UpdateTable(ctx context.Context, id int, req *models.UpdateTableRequest) (*models.Table, error)
+	DeleteTable(ctx context.Context, id int) error
 }
 
 // sessionService implements Service
@@ -153,6 +161,68 @@ func (s *sessionService) DeleteSession(ctx context.Context, id uuid.UUID) error 
 	err := s.repo.DeleteSession(ctx, id)
 	if err != nil {
 		return apperrors.WrapError(500, "failed to delete session", err)
+	}
+	return nil
+}
+
+// CreateTable creates a new table
+func (s *sessionService) CreateTable(ctx context.Context, req *models.CreateTableRequest) (*models.Table, error) {
+	table, err := s.repo.CreateTable(ctx, req)
+	if err != nil {
+		// Check for unique constraint violation
+		if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23505" {
+			return nil, apperrors.ErrConflict
+		}
+		return nil, apperrors.WrapError(500, "failed to create table", err)
+	}
+	return table, nil
+}
+
+// GetTable retrieves a table by ID
+func (s *sessionService) GetTable(ctx context.Context, id int) (*models.Table, error) {
+	table, err := s.repo.GetTable(ctx, id)
+	if err != nil {
+		return nil, apperrors.WrapError(500, "failed to retrieve table", err)
+	}
+	return table, nil
+}
+
+// GetTableByNumber retrieves a table by table number
+func (s *sessionService) GetTableByNumber(ctx context.Context, number int) (*models.Table, error) {
+	table, err := s.repo.GetTableByNumber(ctx, number)
+	if err != nil {
+		return nil, apperrors.WrapError(500, "failed to retrieve table by number", err)
+	}
+	return table, nil
+}
+
+// ListTables lists all tables
+func (s *sessionService) ListTables(ctx context.Context) ([]*models.Table, error) {
+	tables, err := s.repo.ListTables(ctx)
+	if err != nil {
+		return nil, apperrors.WrapError(500, "failed to list tables", err)
+	}
+	return tables, nil
+}
+
+// UpdateTable updates an existing table
+func (s *sessionService) UpdateTable(ctx context.Context, id int, req *models.UpdateTableRequest) (*models.Table, error) {
+	table, err := s.repo.UpdateTable(ctx, id, req)
+	if err != nil {
+		// Check for unique constraint violation
+		if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23505" {
+			return nil, apperrors.WrapError(409, "table number already exists", err)
+		}
+		return nil, apperrors.WrapError(500, "failed to update table", err)
+	}
+	return table, nil
+}
+
+// DeleteTable deletes a table
+func (s *sessionService) DeleteTable(ctx context.Context, id int) error {
+	err := s.repo.DeleteTable(ctx, id)
+	if err != nil {
+		return apperrors.WrapError(500, "failed to delete table", err)
 	}
 	return nil
 }
