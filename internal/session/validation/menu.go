@@ -6,6 +6,7 @@ type CreateMenuItemRequest struct {
 	Description string  `json:"description" validate:"max=1000"`
 	Price       float64 `json:"price" validate:"required,gt=0"`
 	Category    string  `json:"category" validate:"required,min=1,max=100"`
+	Status      string  `json:"status" validate:"required,oneof=available unavailable discontinued"`
 }
 
 // UpdateMenuItemRequest represents the request to update a menu item

@@ -51,3 +51,16 @@ CREATE TABLE IF NOT EXISTS categories (
 
 -- Add foreign key for menu_item_id in order_items
 ALTER TABLE order_items ADD CONSTRAINT fk_order_items_menu_item_id FOREIGN KEY (menu_item_id) REFERENCES menu_items(id);
+
+-- Create indexes for frequent lookups and sorting
+CREATE INDEX IF NOT EXISTS idx_sessions_table_id ON sessions(table_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status);
+CREATE INDEX IF NOT EXISTS idx_sessions_created_at ON sessions(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_orders_session_id ON orders(session_id);
+CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
+CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id);
+CREATE INDEX IF NOT EXISTS idx_order_items_menu_item_id ON order_items(menu_item_id);
+CREATE INDEX IF NOT EXISTS idx_menu_items_category ON menu_items(category);
+CREATE INDEX IF NOT EXISTS idx_menu_items_created_at ON menu_items(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_categories_name ON categories(name);

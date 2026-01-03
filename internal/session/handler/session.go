@@ -1,11 +1,14 @@
 package handler
 
 import (
+	"strconv"
+
+	"restaurant/internal/errors"
+	"restaurant/internal/middleware"
 	"restaurant/internal/session/service"
 	"restaurant/internal/session/validation"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 )
 
 // Handler handles HTTP requests for sessions
@@ -28,6 +31,9 @@ func (h *Handler) RegisterRoutes(router *gin.Engine) {
 		sessionGroup.GET("/:id", h.GetSession)
 		sessionGroup.PUT("/:id", h.UpdateSession)
 		sessionGroup.PUT("/:id/table", h.ChangeSessionTable)
+		sessionGroup.GET("/table/:tableID", h.GetSessionsByTable)
+		sessionGroup.GET("/table/:tableID/active", h.GetActiveSessionsByTable)
+		sessionGroup.DELETE("/:id", h.DeleteSession)
 	}
 }
 
@@ -35,18 +41,18 @@ func (h *Handler) RegisterRoutes(router *gin.Engine) {
 func (h *Handler) CreateSession(c *gin.Context) {
 	var req validation.CreateSessionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		middleware.HandleError(c, errors.NewValidationError(err.Error()))
 		return
 	}
 
 	if err := validation.ValidateCreateSession(req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		middleware.HandleError(c, errors.NewValidationError(err.Error()))
 		return
 	}
 
 	session, err := h.svc.CreateSession(c.Request.Context(), req.TableID)
 	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		middleware.HandleError(c, err)
 		return
 	}
 
@@ -55,25 +61,19 @@ func (h *Handler) CreateSession(c *gin.Context) {
 
 // GetSession handles GET /sessions/:id
 func (h *Handler) GetSession(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		c.JSON(400, gin.H{"error": "Invalid session ID"})
+	id, ok := middleware.UUIDParam(c, "id")
+	if !ok {
 		return
 	}
 
 	if err := validation.ValidateSessionID(id); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		middleware.HandleError(c, errors.NewValidationError(err.Error()))
 		return
 	}
 
 	session, err := h.svc.GetSession(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
-		return
-	}
-	if session == nil {
-		c.JSON(404, gin.H{"error": "Session not found"})
+		middleware.HandleError(c, err)
 		return
 	}
 
@@ -82,10 +82,8 @@ func (h *Handler) GetSession(c *gin.Context) {
 
 // UpdateSession handles PUT /sessions/:id/status
 func (h *Handler) UpdateSession(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		c.JSON(400, gin.H{"error": "Invalid session ID"})
+	id, ok := middleware.UUIDParam(c, "id")
+	if !ok {
 		return
 	}
 
@@ -117,12 +115,18 @@ func (h *Handler) UpdateSession(c *gin.Context) {
 // ListSessions handles GET /sessions
 func (h *Handler) ListSessions(c *gin.Context) {
 	var req validation.ListSessionsRequest
-	req.Offset = 0
-	req.Limit = 10
 
 	if err := c.ShouldBindQuery(&req); err != nil {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
+	}
+
+	// Set defaults only if not provided
+	if req.Offset == 0 && c.Query("offset") == "" {
+		req.Offset = 0
+	}
+	if req.Limit == 0 && c.Query("limit") == "" {
+		req.Limit = 10
 	}
 
 	if err := validation.ValidateListSessions(req); err != nil {
@@ -152,10 +156,8 @@ func (h *Handler) ListActiveSessions(c *gin.Context) {
 
 // ChangeSessionTable handles PUT /sessions/:id/table
 func (h *Handler) ChangeSessionTable(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		c.JSON(400, gin.H{"error": "Invalid session ID"})
+	id, ok := middleware.UUIDParam(c, "id")
+	if !ok {
 		return
 	}
 
@@ -175,7 +177,7 @@ func (h *Handler) ChangeSessionTable(c *gin.Context) {
 		return
 	}
 
-	err = h.svc.ChangeTable(c.Request.Context(), id, req.TableID)
+	err := h.svc.ChangeTable(c.Request.Context(), id, req.TableID)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -185,11 +187,56 @@ func (h *Handler) ChangeSessionTable(c *gin.Context) {
 }
 
 func (h *Handler) GetSessionsByTable(c *gin.Context) {
-	// TODO: Implement
-	c.JSON(501, gin.H{"error": "Not implemented"})
+	tableIDStr := c.Param("tableID")
+	tableID, err := strconv.Atoi(tableIDStr)
+	if err != nil {
+		c.JSON(400, gin.H{"error": "Invalid table ID - must be an integer"})
+		return
+	}
+
+	sessions, err := h.svc.GetSessionsByTable(c.Request.Context(), tableID)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(200, sessions)
+}
+
+// GetActiveSessionsByTable handles GET /sessions/table/:tableID/active
+func (h *Handler) GetActiveSessionsByTable(c *gin.Context) {
+	tableIDStr := c.Param("tableID")
+	tableID, err := strconv.Atoi(tableIDStr)
+	if err != nil {
+		c.JSON(400, gin.H{"error": "Invalid table ID - must be an integer"})
+		return
+	}
+
+	sessions, err := h.svc.GetActiveSessionsByTable(c.Request.Context(), tableID)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(200, sessions)
 }
 
 func (h *Handler) DeleteSession(c *gin.Context) {
-	// TODO: Implement
-	c.JSON(501, gin.H{"error": "Not implemented"})
+	id, ok := middleware.UUIDParam(c, "id")
+	if !ok {
+		return
+	}
+
+	if err := validation.ValidateSessionID(id); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	err := h.svc.DeleteSession(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(200, gin.H{"message": "Session deleted successfully"})
 }

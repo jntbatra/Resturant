@@ -1,11 +1,12 @@
 package handler
 
 import (
+	"restaurant/internal/errors"
+	"restaurant/internal/middleware"
 	"restaurant/internal/session/service"
 	"restaurant/internal/session/validation"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 )
 
 // OrderHandler handles HTTP requests for orders
@@ -29,24 +30,31 @@ func (h *OrderHandler) RegisterRoutes(router *gin.Engine) {
 		orderGroup.POST("/:id/items", h.CreateOrderItem)
 		orderGroup.GET("/:id/items", h.GetOrderItems)
 	}
+
+	// Session-related order routes
+	sessionGroup := router.Group("/sessions")
+	{
+		sessionGroup.GET("/:id/orders", h.GetOrdersBySession)
+		sessionGroup.GET("/:id/order-items", h.GetOrderItemsBySessionIDs)
+	}
 }
 
 // CreateOrder handles POST /orders
 func (h *OrderHandler) CreateOrder(c *gin.Context) {
 	var req validation.CreateOrderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		middleware.HandleError(c, errors.NewValidationError(err.Error()))
 		return
 	}
 
 	if err := validation.ValidateCreateOrder(req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		middleware.HandleError(c, errors.NewValidationError(err.Error()))
 		return
 	}
 
 	order, err := h.svc.CreateOrder(c.Request.Context(), req.SessionID)
 	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		middleware.HandleError(c, err)
 		return
 	}
 
@@ -55,20 +63,14 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 
 // GetOrder handles GET /orders/:id
 func (h *OrderHandler) GetOrder(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		c.JSON(400, gin.H{"error": "Invalid order ID"})
+	id, ok := middleware.UUIDParam(c, "id")
+	if !ok {
 		return
 	}
 
 	order, err := h.svc.GetOrder(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
-		return
-	}
-	if order == nil {
-		c.JSON(404, gin.H{"error": "Order not found"})
+		middleware.HandleError(c, err)
 		return
 	}
 
@@ -78,22 +80,28 @@ func (h *OrderHandler) GetOrder(c *gin.Context) {
 // ListOrders handles GET /orders
 func (h *OrderHandler) ListOrders(c *gin.Context) {
 	var req validation.ListOrdersRequest
-	req.Offset = 0
-	req.Limit = 10
 
 	if err := c.ShouldBindQuery(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		middleware.HandleError(c, errors.NewValidationError(err.Error()))
 		return
 	}
 
+	// Set defaults only if not provided
+	if req.Offset == 0 && c.Query("offset") == "" {
+		req.Offset = 0
+	}
+	if req.Limit == 0 && c.Query("limit") == "" {
+		req.Limit = 10
+	}
+
 	if err := validation.ValidateListOrders(req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		middleware.HandleError(c, errors.NewValidationError(err.Error()))
 		return
 	}
 
 	orders, err := h.svc.ListOrders(c.Request.Context(), req.Limit, req.Offset)
 	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		middleware.HandleError(c, err)
 		return
 	}
 
@@ -102,27 +110,25 @@ func (h *OrderHandler) ListOrders(c *gin.Context) {
 
 // UpdateOrder handles PUT /orders/:id
 func (h *OrderHandler) UpdateOrder(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		c.JSON(400, gin.H{"error": "Invalid order ID"})
+	id, ok := middleware.UUIDParam(c, "id")
+	if !ok {
 		return
 	}
 
 	var req validation.UpdateOrderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		middleware.HandleError(c, errors.NewValidationError(err.Error()))
 		return
 	}
 
 	if err := validation.ValidateUpdateOrder(req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		middleware.HandleError(c, errors.NewValidationError(err.Error()))
 		return
 	}
 
-	err = h.svc.UpdateOrder(c.Request.Context(), id, string(req.Status))
+	err := h.svc.UpdateOrder(c.Request.Context(), id, string(req.Status))
 	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		middleware.HandleError(c, err)
 		return
 	}
 
@@ -133,18 +139,18 @@ func (h *OrderHandler) UpdateOrder(c *gin.Context) {
 func (h *OrderHandler) CreateOrderItem(c *gin.Context) {
 	var req validation.CreateOrderItemRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		middleware.HandleError(c, errors.NewValidationError(err.Error()))
 		return
 	}
 
 	if err := validation.ValidateCreateOrderItem(req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		middleware.HandleError(c, errors.NewValidationError(err.Error()))
 		return
 	}
 
 	item, err := h.svc.CreateOrderItem(c.Request.Context(), req.MenuItemID, req.Quantity, req.OrderID)
 	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		middleware.HandleError(c, err)
 		return
 	}
 
@@ -153,16 +159,14 @@ func (h *OrderHandler) CreateOrderItem(c *gin.Context) {
 
 // GetOrderItems handles GET /orders/:id/items
 func (h *OrderHandler) GetOrderItems(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		c.JSON(400, gin.H{"error": "Invalid order ID"})
+	id, ok := middleware.UUIDParam(c, "id")
+	if !ok {
 		return
 	}
 
 	items, err := h.svc.GetOrderItems(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		middleware.HandleError(c, err)
 		return
 	}
 
@@ -171,65 +175,32 @@ func (h *OrderHandler) GetOrderItems(c *gin.Context) {
 
 // GetOrdersBySession handles GET /sessions/:id/orders
 func (h *OrderHandler) GetOrdersBySession(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		c.JSON(400, gin.H{"error": "Invalid session ID"})
+	id, ok := middleware.UUIDParam(c, "id")
+	if !ok {
 		return
 	}
 
 	orders, err := h.svc.GetOrdersBySession(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		middleware.HandleError(c, err)
 		return
 	}
 
 	c.JSON(200, orders)
 }
 
-// GetOrderItemsByOrderIDs handles batch retrieval of order items
-func (h *OrderHandler) GetOrderItemsByOrderIDs(c *gin.Context) {
-	// TODO: Implement batch order items retrieval
-	c.JSON(501, gin.H{"error": "Not implemented"})
-}
-
 // GetOrderItemsBySessionIDs handles GET /sessions/:id/order-items
 func (h *OrderHandler) GetOrderItemsBySessionIDs(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		c.JSON(400, gin.H{"error": "Invalid session ID"})
+	id, ok := middleware.UUIDParam(c, "id")
+	if !ok {
 		return
 	}
 
 	items, err := h.svc.GetOrderItemsBySessionID(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		middleware.HandleError(c, err)
 		return
 	}
 
 	c.JSON(200, items)
-}
-
-// UpdateOrderItem handles PUT /orders/:id/items/:itemId
-func (h *OrderHandler) UpdateOrderItem(c *gin.Context) {
-	var req validation.UpdateOrderItemRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
-		return
-	}
-
-	if err := validation.ValidateUpdateOrderItem(req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
-		return
-	}
-
-	// TODO: Implement order item update in service
-	c.JSON(501, gin.H{"error": "Order item update not yet implemented"})
-}
-
-// DeleteOrderItem handles DELETE /orders/:id/items/:itemId
-func (h *OrderHandler) DeleteOrderItem(c *gin.Context) {
-	// TODO: Implement order item deletion in service
-	c.JSON(501, gin.H{"error": "Order item deletion not yet implemented"})
 }

@@ -2,8 +2,8 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	apperrors "restaurant/internal/errors"
 	"restaurant/internal/session/models"
 	"restaurant/internal/session/repository"
 	"time"
@@ -24,7 +24,7 @@ type MenuService interface {
 	CreateCategory(ctx context.Context, name string) (*models.Category, error)
 	DeleteCategory(ctx context.Context, name string) error
 	UpdateCategory(ctx context.Context, old_name string, new_name string) error
-	CategoryIDByNameCareateIfNotPresent(ctx context.Context, name string) (uuid.UUID, error)
+	CategoryIDByNameCreateIfNotPresent(ctx context.Context, name string) (uuid.UUID, error)
 	CategoryIDByName(ctx context.Context, name string) (uuid.UUID, error)
 }
 
@@ -40,16 +40,20 @@ func NewMenuService(repo repository.MenuRepository) MenuService {
 
 // Implementations (wrappers around repository)
 func (s *menuService) GetMenuItem(ctx context.Context, id uuid.UUID) (*models.MenuItem, error) {
-	return s.repo.GetMenuItem(ctx, id)
+	item, err := s.repo.GetMenuItem(ctx, id)
+	if err != nil {
+		return nil, apperrors.WrapError(500, "failed to retrieve menu item", err)
+	}
+	return item, nil
 }
 
 func (s *menuService) CreateMenuItem(ctx context.Context, Name string, Description string, Price float64, Category string, AvalabilityStatus models.ItemStatus) (*models.MenuItem, error) {
 	// Shape validation (name, description, price, category) already done by handler using ValidateStruct
 
 	// Ensure category exists (BUSINESS LOGIC)
-	id, err := s.CategoryIDByNameCareateIfNotPresent(ctx, Category)
+	id, err := s.CategoryIDByNameCreateIfNotPresent(ctx, Category)
 	if err != nil {
-		return nil, err
+		return nil, apperrors.WrapError(500, "failed to ensure category exists", err)
 	}
 
 	item := &models.MenuItem{
@@ -63,22 +67,30 @@ func (s *menuService) CreateMenuItem(ctx context.Context, Name string, Descripti
 	}
 	err = s.repo.CreateMenuItem(ctx, item)
 	if err != nil {
-		return nil, err
+		// Check for UNIQUE constraint violation
+		if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23505" {
+			return nil, apperrors.ErrDuplicateMenuItem
+		}
+		return nil, apperrors.WrapError(500, "failed to create menu item", err)
 	}
 	return item, nil
 }
 
 func (s *menuService) ListMenuItems(ctx context.Context, offset int, limit int) ([]*models.MenuItem, error) {
-	return s.repo.ListMenuItems(ctx, offset, limit)
+	items, err := s.repo.ListMenuItems(ctx, offset, limit)
+	if err != nil {
+		return nil, apperrors.WrapError(500, "failed to list menu items", err)
+	}
+	return items, nil
 }
 
 func (s *menuService) UpdateMenuItem(ctx context.Context, id uuid.UUID, name string, desc string, category string, price float64, status models.ItemStatus) error {
 	// Shape validation (name, description, price, category) already done by handler using ValidateStruct
 
 	// Ensure category exists (BUSINESS LOGIC)
-	id, err := s.CategoryIDByNameCareateIfNotPresent(ctx, category)
+	categoryID, err := s.CategoryIDByNameCreateIfNotPresent(ctx, category)
 	if err != nil {
-		return err
+		return apperrors.WrapError(500, "failed to ensure category exists", err)
 	}
 
 	item := &models.MenuItem{
@@ -86,25 +98,45 @@ func (s *menuService) UpdateMenuItem(ctx context.Context, id uuid.UUID, name str
 		Name:              name,
 		Description:       desc,
 		Price:             price,
-		CategoryID:        id,
+		CategoryID:        categoryID,
 		AvalabilityStatus: status,
 	}
-	return s.repo.UpdateMenuItem(ctx, item)
+	err = s.repo.UpdateMenuItem(ctx, item)
+	if err != nil {
+		return apperrors.WrapError(500, "failed to update menu item", err)
+	}
+	return nil
 }
 
 func (s *menuService) DeleteMenuItem(ctx context.Context, id uuid.UUID) error {
-	return s.repo.DeleteMenuItem(ctx, id)
+	err := s.repo.DeleteMenuItem(ctx, id)
+	if err != nil {
+		// Check for foreign key constraint violation
+		if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23503" {
+			return apperrors.ErrForeignKeyViolation
+		}
+		return apperrors.WrapError(500, "failed to delete menu item", err)
+	}
+	return nil
 }
 
 func (s *menuService) GetMenuItemsByCategory(ctx context.Context, category string) ([]*models.MenuItem, error) {
 	if category == "" {
-		return nil, errors.New("category is required")
+		return nil, apperrors.NewValidationError("category is required")
 	}
-	return s.repo.GetMenuItemsByCategory(ctx, category)
+	items, err := s.repo.GetMenuItemsByCategory(ctx, category)
+	if err != nil {
+		return nil, apperrors.WrapError(500, "failed to get menu items by category", err)
+	}
+	return items, nil
 }
 
 func (s *menuService) ListCategories(ctx context.Context) ([]models.Category, error) {
-	return s.repo.ListCategories(ctx)
+	categories, err := s.repo.ListCategories(ctx)
+	if err != nil {
+		return nil, apperrors.WrapError(500, "failed to list categories", err)
+	}
+	return categories, nil
 }
 
 func (s *menuService) CreateCategory(ctx context.Context, name string) (*models.Category, error) {
@@ -116,10 +148,10 @@ func (s *menuService) CreateCategory(ctx context.Context, name string) (*models.
 		// Handle PostgreSQL UNIQUE constraint violation
 		if pqErr, ok := err.(*pq.Error); ok {
 			if pqErr.Code == "23505" { // unique_violation error code
-				return nil, errors.New("category already exists")
+				return nil, apperrors.ErrDuplicateCategory
 			}
 		}
-		return nil, err
+		return nil, apperrors.WrapError(500, "failed to create category", err)
 	}
 
 	// Return category with generated ID
@@ -130,7 +162,15 @@ func (s *menuService) CreateCategory(ctx context.Context, name string) (*models.
 }
 
 func (s *menuService) DeleteCategory(ctx context.Context, name string) error {
-	return s.repo.DeleteCategory(ctx, name)
+	err := s.repo.DeleteCategory(ctx, name)
+	if err != nil {
+		// Check for foreign key constraint violation
+		if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23503" {
+			return apperrors.ErrForeignKeyViolation
+		}
+		return apperrors.WrapError(500, "failed to delete category", err)
+	}
+	return nil
 }
 
 func (s *menuService) UpdateCategory(ctx context.Context, old_name string, new_name string) error {
@@ -139,21 +179,26 @@ func (s *menuService) UpdateCategory(ctx context.Context, old_name string, new_n
 		// Handle PostgreSQL UNIQUE constraint violation
 		if pqErr, ok := err.(*pq.Error); ok {
 			if pqErr.Code == "23505" { // unique_violation error code
-				return fmt.Errorf("category name '%s' already exists", new_name)
+				return apperrors.NewConflictError(fmt.Sprintf("category name '%s' already exists", new_name))
 			}
 		}
+		return apperrors.WrapError(500, "failed to update category", err)
 	}
-	return err
+	return nil
 }
 
-func (s *menuService) CategoryIDByNameCareateIfNotPresent(ctx context.Context, name string) (uuid.UUID, error) {
-	id, err := s.repo.CategoryIDByNameCareateIfNotPresent(ctx, name)
+func (s *menuService) CategoryIDByNameCreateIfNotPresent(ctx context.Context, name string) (uuid.UUID, error) {
+	id, err := s.repo.CategoryIDByNameCreateIfNotPresent(ctx, name)
 	if err != nil {
-		return uuid.Nil, err
+		return uuid.Nil, apperrors.WrapError(500, "failed to get or create category", err)
 	}
 	return id, nil
 }
 
 func (s *menuService) CategoryIDByName(ctx context.Context, name string) (uuid.UUID, error) {
-	return s.repo.CategoryIDByName(ctx, name)
+	id, err := s.repo.CategoryIDByName(ctx, name)
+	if err != nil {
+		return uuid.Nil, apperrors.WrapError(500, "failed to get category ID", err)
+	}
+	return id, nil
 }

@@ -1,11 +1,13 @@
 package handler
 
 import (
+	"restaurant/internal/errors"
+	"restaurant/internal/middleware"
+	"restaurant/internal/session/models"
 	"restaurant/internal/session/service"
 	"restaurant/internal/session/validation"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 )
 
 // MenuHandler handles HTTP requests for menu items
@@ -27,17 +29,17 @@ func (h *MenuHandler) RegisterRoutes(router *gin.Engine) {
 		menuGroup.GET("/:id", h.GetMenuItem)
 		menuGroup.PUT("/:id", h.UpdateMenuItem)
 		menuGroup.DELETE("/:id", h.DeleteMenuItem)
-	}
 
-	categoryGroup := router.Group("/categories")
-	{
-		categoryGroup.GET("", h.ListCategories)
-		categoryGroup.POST("", h.CreateCategory)
-		categoryGroup.GET("/:name", h.GetCategoryByName)
-		categoryGroup.PUT("/:name", h.UpdateCategory)
-		categoryGroup.DELETE("/:name", h.DeleteCategory)
-		categoryGroup.GET("/:name/id", h.CategoryIDByName)
-		categoryGroup.GET("/:name/id_or_create", h.CategoryIDorCreate)
+		categoryGroup := menuGroup.Group("/categories")
+		{
+			categoryGroup.GET("", h.ListCategories)
+			categoryGroup.POST("", h.CreateCategory)
+			categoryGroup.GET("/:name", h.GetCategoryByName)
+			categoryGroup.PUT("/:name", h.UpdateCategory)
+			categoryGroup.DELETE("/:name", h.DeleteCategory)
+			categoryGroup.GET("/:name/id", h.CategoryIDByName)
+			categoryGroup.GET("/:name/id_or_create", h.CategoryIDorCreate)
+		}
 	}
 }
 
@@ -45,18 +47,18 @@ func (h *MenuHandler) RegisterRoutes(router *gin.Engine) {
 func (h *MenuHandler) CreateMenuItem(c *gin.Context) {
 	var req validation.CreateMenuItemRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		middleware.HandleError(c, errors.NewValidationError(err.Error()))
 		return
 	}
 
 	if err := validation.ValidateCreateMenuItem(req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		middleware.HandleError(c, errors.NewValidationError(err.Error()))
 		return
 	}
 
-	item, err := h.svc.CreateMenuItem(c.Request.Context(), req.Name, req.Description, req.Price, req.Category, "in_stock")
+	item, err := h.svc.CreateMenuItem(c.Request.Context(), req.Name, req.Description, req.Price, req.Category, models.ItemStatus(req.Status))
 	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		middleware.HandleError(c, err)
 		return
 	}
 
@@ -65,20 +67,14 @@ func (h *MenuHandler) CreateMenuItem(c *gin.Context) {
 
 // GetMenuItem handles GET /menu/:id
 func (h *MenuHandler) GetMenuItem(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		c.JSON(400, gin.H{"error": "Invalid menu item ID"})
+	id, ok := middleware.UUIDParam(c, "id")
+	if !ok {
 		return
 	}
 
 	item, err := h.svc.GetMenuItem(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
-		return
-	}
-	if item == nil {
-		c.JSON(404, gin.H{"error": "Menu item not found"})
+		middleware.HandleError(c, err)
 		return
 	}
 
@@ -90,18 +86,18 @@ func (h *MenuHandler) ListMenuItems(c *gin.Context) {
 	var req validation.ListMenuItemsRequest
 
 	if err := c.ShouldBindQuery(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		middleware.HandleError(c, errors.NewValidationError(err.Error()))
 		return
 	}
 
 	if err := validation.ValidateListMenuItems(req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		middleware.HandleError(c, errors.NewValidationError(err.Error()))
 		return
 	}
 
 	items, err := h.svc.ListMenuItems(c.Request.Context(), req.Offset, req.Limit)
 	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		middleware.HandleError(c, err)
 		return
 	}
 
@@ -110,27 +106,26 @@ func (h *MenuHandler) ListMenuItems(c *gin.Context) {
 
 // UpdateMenuItem handles PUT /menu/:id
 func (h *MenuHandler) UpdateMenuItem(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		c.JSON(400, gin.H{"error": "Invalid menu item ID"})
+	id, ok := middleware.UUIDParam(c, "id")
+	if !ok {
 		return
 	}
 
 	var req validation.UpdateMenuItemRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		middleware.HandleError(c, errors.NewValidationError(err.Error()))
 		return
 	}
 
 	if err := validation.ValidateUpdateMenuItem(req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		middleware.HandleError(c, errors.NewValidationError(err.Error()))
 		return
 	}
 
-	err = h.svc.UpdateMenuItem(c.Request.Context(), id, req.Name, req.Description, req.Category, req.Price, "in_stock")
+	var err error
+	err = h.svc.UpdateMenuItem(c.Request.Context(), id, req.Name, req.Description, req.Category, req.Price, models.ItemStatus("in_stock"))
 	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		middleware.HandleError(c, err)
 		return
 	}
 
@@ -139,16 +134,14 @@ func (h *MenuHandler) UpdateMenuItem(c *gin.Context) {
 
 // DeleteMenuItem handles DELETE /menu/:id
 func (h *MenuHandler) DeleteMenuItem(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		c.JSON(400, gin.H{"error": "Invalid menu item ID"})
+	id, ok := middleware.UUIDParam(c, "id")
+	if !ok {
 		return
 	}
 
-	err = h.svc.DeleteMenuItem(c.Request.Context(), id)
+	err := h.svc.DeleteMenuItem(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		middleware.HandleError(c, err)
 		return
 	}
 
@@ -159,7 +152,7 @@ func (h *MenuHandler) DeleteMenuItem(c *gin.Context) {
 func (h *MenuHandler) ListCategories(c *gin.Context) {
 	categories, err := h.svc.ListCategories(c.Request.Context())
 	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		middleware.HandleError(c, err)
 		return
 	}
 
@@ -171,13 +164,13 @@ func (h *MenuHandler) GetCategoryByName(c *gin.Context) {
 	name := c.Param("name")
 
 	if name == "" {
-		c.JSON(400, gin.H{"error": "category name is required"})
+		middleware.HandleError(c, errors.NewValidationError("category name is required"))
 		return
 	}
 
 	id, err := h.svc.CategoryIDByName(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		middleware.HandleError(c, err)
 		return
 	}
 
@@ -188,18 +181,18 @@ func (h *MenuHandler) GetCategoryByName(c *gin.Context) {
 func (h *MenuHandler) CreateCategory(c *gin.Context) {
 	var req validation.CreateCategoryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		middleware.HandleError(c, errors.NewValidationError(err.Error()))
 		return
 	}
 
 	if err := validation.ValidateCreateCategory(req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		middleware.HandleError(c, errors.NewValidationError(err.Error()))
 		return
 	}
 
 	category, err := h.svc.CreateCategory(c.Request.Context(), req.Name)
 	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		middleware.HandleError(c, err)
 		return
 	}
 
@@ -213,18 +206,18 @@ func (h *MenuHandler) UpdateCategory(c *gin.Context) {
 	var req validation.UpdateCategoryRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		middleware.HandleError(c, errors.NewValidationError(err.Error()))
 		return
 	}
 
 	if err := validation.ValidateUpdateCategory(req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		middleware.HandleError(c, errors.NewValidationError(err.Error()))
 		return
 	}
 
 	err := h.svc.UpdateCategory(c.Request.Context(), old_name, req.Name)
 	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		middleware.HandleError(c, err)
 		return
 	}
 
@@ -236,7 +229,7 @@ func (h *MenuHandler) DeleteCategory(c *gin.Context) {
 	name := c.Param("name")
 	err := h.svc.DeleteCategory(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		middleware.HandleError(c, err)
 		return
 	}
 
@@ -247,13 +240,13 @@ func (h *MenuHandler) CategoryIDByName(c *gin.Context) {
 	name := c.Param("name")
 
 	if name == "" {
-		c.JSON(400, gin.H{"error": "category name is required"})
+		middleware.HandleError(c, errors.NewValidationError("category name is required"))
 		return
 	}
 
 	id, err := h.svc.CategoryIDByName(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		middleware.HandleError(c, err)
 		return
 	}
 	c.JSON(200, gin.H{"id": id})
@@ -263,13 +256,13 @@ func (h *MenuHandler) CategoryIDorCreate(c *gin.Context) {
 	name := c.Param("name")
 
 	if name == "" {
-		c.JSON(400, gin.H{"error": "category name is required"})
+		middleware.HandleError(c, errors.NewValidationError("category name is required"))
 		return
 	}
 
-	id, err := h.svc.CategoryIDByNameCareateIfNotPresent(c.Request.Context(), name)
+	id, err := h.svc.CategoryIDByNameCreateIfNotPresent(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		middleware.HandleError(c, err)
 		return
 	}
 	c.JSON(200, gin.H{"id": id})

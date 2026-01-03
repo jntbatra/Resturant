@@ -4,11 +4,20 @@ import (
 	"context"
 	"database/sql"
 
+	"restaurant/internal/errors"
 	"restaurant/internal/session/models"
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
 )
+
+// Transaction provides methods for executing operations within a transaction
+type Transaction interface {
+	// Rollback cancels the transaction
+	Rollback() error
+	// Commit commits the transaction
+	Commit() error
+}
 
 // OrderRepository defines methods for order database operations
 type OrderRepository interface {
@@ -35,9 +44,21 @@ type OrderRepository interface {
 
 	// GetOrderItemsByOrderIDs retrieves order items by multiple order IDs
 	GetOrderItemsByOrderIDs(ctx context.Context, orderIDs []uuid.UUID) ([]*models.OrderItems, error)
+
+	// BeginTx begins a new database transaction
+	BeginTx(ctx context.Context) (*sql.Tx, error)
 }
 
-// postgresOrderRepository implements OrderRepository using PostgreSQL
+// TxOrderRepository provides transaction-aware order operations
+type TxOrderRepository interface {
+	// CreateOrderWithItems atomically creates an order and its items in a transaction
+	CreateOrderWithItems(ctx context.Context, order *models.Order, items []*models.OrderItems, tx *sql.Tx) error
+
+	// UpdateOrderItemsInTx updates multiple order items within a transaction
+	UpdateOrderItemsInTx(ctx context.Context, items []*models.OrderItems, tx *sql.Tx) error
+}
+
+// postgresOrderRepository implements OrderRepository and TxOrderRepository using PostgreSQL
 type postgresOrderRepository struct {
 	db *sql.DB
 }
@@ -45,6 +66,20 @@ type postgresOrderRepository struct {
 // NewOrderRepository creates a new PostgreSQL-based order repository
 func NewOrderRepository(db *sql.DB) OrderRepository {
 	return &postgresOrderRepository{db: db}
+}
+
+// NewTxOrderRepository creates a new transaction-aware order repository
+func NewTxOrderRepository(db *sql.DB) TxOrderRepository {
+	return &postgresOrderRepository{db: db}
+}
+
+// BeginTx begins a new database transaction
+func (r *postgresOrderRepository) BeginTx(ctx context.Context) (*sql.Tx, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, errors.WrapError(500, "failed to begin transaction", err)
+	}
+	return tx, nil
 }
 
 // CreateOrder inserts a new order into the database
@@ -64,9 +99,9 @@ func (r *postgresOrderRepository) GetOrder(ctx context.Context, id uuid.UUID) (*
 	err := r.db.QueryRowContext(ctx, "SELECT id, session_id, status, created_at FROM orders WHERE id = $1", id).Scan(&order.ID, &order.SessionID, &order.Status, &order.CreatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return nil, errors.ErrOrderNotFound
 		}
-		return nil, err
+		return nil, errors.NewInternalError("failed to get order", err)
 	}
 	return &order, nil
 }
@@ -139,6 +174,48 @@ func (r *postgresOrderRepository) GetOrderItems(ctx context.Context, orderID uui
 		return nil, err
 	}
 	return items, nil
+}
+
+// CreateOrderWithItems atomically creates an order and its items in a transaction
+func (r *postgresOrderRepository) CreateOrderWithItems(ctx context.Context, order *models.Order, items []*models.OrderItems, tx *sql.Tx) error {
+	// Insert order within transaction
+	_, err := tx.ExecContext(
+		ctx,
+		"INSERT INTO orders (id, session_id, status, created_at) VALUES ($1, $2, $3, $4)",
+		order.ID, order.SessionID, order.Status, order.CreatedAt,
+	)
+	if err != nil {
+		return errors.WrapError(500, "failed to create order in transaction", err)
+	}
+
+	// Insert order items within same transaction
+	for _, item := range items {
+		_, err := tx.ExecContext(
+			ctx,
+			"INSERT INTO order_items (id, order_id, menu_item_id, quantity) VALUES ($1, $2, $3, $4)",
+			item.ID, item.OrderID, item.MenuItemID, item.Quantity,
+		)
+		if err != nil {
+			return errors.WrapError(500, "failed to create order item in transaction", err)
+		}
+	}
+
+	return nil
+}
+
+// UpdateOrderItemsInTx updates multiple order items within a transaction
+func (r *postgresOrderRepository) UpdateOrderItemsInTx(ctx context.Context, items []*models.OrderItems, tx *sql.Tx) error {
+	for _, item := range items {
+		_, err := tx.ExecContext(
+			ctx,
+			"UPDATE order_items SET quantity = $1 WHERE id = $2",
+			item.Quantity, item.ID,
+		)
+		if err != nil {
+			return errors.WrapError(500, "failed to update order item in transaction", err)
+		}
+	}
+	return nil
 }
 
 // GetOrdersBySession retrieves orders by session ID

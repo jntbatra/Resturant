@@ -2,12 +2,13 @@ package service
 
 import (
 	"context"
-	"errors"
+	apperrors "restaurant/internal/errors"
 	"restaurant/internal/session/models"
 	"restaurant/internal/session/repository"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 )
 
 // OrderService defines business logic for orders
@@ -50,7 +51,11 @@ func (s *orderService) CreateOrder(ctx context.Context, sessionID uuid.UUID) (*m
 	// Persist the order in the repository
 	err := s.repo.CreateOrder(ctx, order)
 	if err != nil {
-		return nil, err
+		// Check for foreign key constraint violation
+		if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23503" {
+			return nil, apperrors.ErrForeignKeyViolation
+		}
+		return nil, apperrors.WrapError(500, "failed to create order", err)
 	}
 	return order, nil
 }
@@ -58,21 +63,33 @@ func (s *orderService) CreateOrder(ctx context.Context, sessionID uuid.UUID) (*m
 // GetOrder retrieves an order by ID with validation
 func (s *orderService) GetOrder(ctx context.Context, id uuid.UUID) (*models.Order, error) {
 	// Retrieve order from repository
-	return s.repo.GetOrder(ctx, id)
+	order, err := s.repo.GetOrder(ctx, id)
+	if err != nil {
+		return nil, apperrors.WrapError(500, "failed to retrieve order", err)
+	}
+	return order, nil
 }
 
 // ListOrders lists orders with pagination and validation
 func (s *orderService) ListOrders(ctx context.Context, limit int, offset int) ([]*models.Order, error) {
 	// Shape validation (limit, offset ranges) already done by handler using ValidateStruct
 	// Retrieve paginated orders from repository
-	return s.repo.ListOrders(ctx, limit, offset)
+	orders, err := s.repo.ListOrders(ctx, limit, offset)
+	if err != nil {
+		return nil, apperrors.WrapError(500, "failed to list orders", err)
+	}
+	return orders, nil
 }
 
 // UpdateOrder updates an order status with validation
 func (s *orderService) UpdateOrder(ctx context.Context, orderID uuid.UUID, status string) error {
 	// Shape validation (status oneof) already done by handler using ValidateStruct
 	// Update order status in repository
-	return s.repo.UpdateOrder(ctx, orderID, status)
+	err := s.repo.UpdateOrder(ctx, orderID, status)
+	if err != nil {
+		return apperrors.WrapError(500, "failed to update order status", err)
+	}
+	return nil
 }
 
 // CreateOrderItem creates a new order item with validation
@@ -82,10 +99,10 @@ func (s *orderService) CreateOrderItem(ctx context.Context, itemID uuid.UUID, qu
 	// Validate menu item exists and is available (BUSINESS LOGIC)
 	menuItem, err := s.menuService.GetMenuItem(ctx, itemID)
 	if err != nil {
-		return nil, errors.New("menu item not found")
+		return nil, err
 	}
 	if menuItem.AvalabilityStatus != "in_stock" {
-		return nil, errors.New("menu item is out of stock")
+		return nil, apperrors.ErrOutOfStock
 	}
 
 	// Create order item with generated UUID
@@ -98,7 +115,11 @@ func (s *orderService) CreateOrderItem(ctx context.Context, itemID uuid.UUID, qu
 	// Persist order item in repository
 	err = s.repo.CreateOrderItem(ctx, Item)
 	if err != nil {
-		return nil, err
+		// Check for foreign key constraint violation
+		if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23503" {
+			return nil, apperrors.ErrForeignKeyViolation
+		}
+		return nil, apperrors.WrapError(500, "failed to create order item", err)
 	}
 	return Item, nil
 }
@@ -106,13 +127,21 @@ func (s *orderService) CreateOrderItem(ctx context.Context, itemID uuid.UUID, qu
 // GetOrderItems retrieves order items by order ID with validation
 func (s *orderService) GetOrderItems(ctx context.Context, orderID uuid.UUID) ([]*models.OrderItems, error) {
 	// Retrieve order items from repository
-	return s.repo.GetOrderItems(ctx, orderID)
+	items, err := s.repo.GetOrderItems(ctx, orderID)
+	if err != nil {
+		return nil, apperrors.WrapError(500, "failed to retrieve order items", err)
+	}
+	return items, nil
 }
 
 // GetOrdersBySession retrieves orders by session ID with validation
 func (s *orderService) GetOrdersBySession(ctx context.Context, sessionID uuid.UUID) ([]*models.Order, error) {
 	// Retrieve orders from repository
-	return s.repo.GetOrdersBySession(ctx, sessionID)
+	orders, err := s.repo.GetOrdersBySession(ctx, sessionID)
+	if err != nil {
+		return nil, apperrors.WrapError(500, "failed to retrieve orders for session", err)
+	}
+	return orders, nil
 }
 
 // GetOrderItemsBySessionID retrieves order items by session ID
@@ -121,7 +150,7 @@ func (s *orderService) GetOrderItemsBySessionID(ctx context.Context, sessionID u
 	// Step 1: Get all orders for the session
 	orders, err := s.repo.GetOrdersBySession(ctx, sessionID)
 	if err != nil {
-		return nil, err
+		return nil, apperrors.WrapError(500, "failed to retrieve orders for session", err)
 	}
 
 	// If no orders, return empty slice
@@ -136,5 +165,9 @@ func (s *orderService) GetOrderItemsBySessionID(ctx context.Context, sessionID u
 	}
 
 	// Step 3: Get all order items for these orders
-	return s.repo.GetOrderItemsByOrderIDs(ctx, orderIDs)
+	items, err := s.repo.GetOrderItemsByOrderIDs(ctx, orderIDs)
+	if err != nil {
+		return nil, apperrors.WrapError(500, "failed to retrieve order items", err)
+	}
+	return items, nil
 }

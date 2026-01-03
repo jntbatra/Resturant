@@ -30,6 +30,15 @@ type Repository interface {
 
 	// ChangeSessionTable changes the table ID of a session by table number
 	ChangeSessionTable(ctx context.Context, id uuid.UUID, tableNumber int) error
+
+	// GetSessionsByTable retrieves all sessions for a specific table
+	GetSessionsByTable(ctx context.Context, tableID int) ([]*models.Session, error)
+
+	// GetActiveSessionsByTable retrieves only active sessions for a specific table
+	GetActiveSessionsByTable(ctx context.Context, tableID int) ([]*models.Session, error)
+
+	// DeleteSession deletes a session by ID
+	DeleteSession(ctx context.Context, id uuid.UUID) error
 }
 
 // postgresRepository implements Repository using PostgreSQL
@@ -157,4 +166,64 @@ func (r *postgresRepository) GetSession(ctx context.Context, id uuid.UUID) (*mod
 	session.Status = models.SessionStatus(status)
 	session.CompletedAt = completedAt
 	return &session, nil
+}
+
+// GetSessionsByTable retrieves all sessions for a specific table
+func (r *postgresRepository) GetSessionsByTable(ctx context.Context, tableID int) ([]*models.Session, error) {
+	rows, err := r.db.QueryContext(ctx, "SELECT id, table_id, created_at, completed_at, status FROM sessions WHERE table_id = $1 ORDER BY created_at DESC", tableID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var sessions []*models.Session
+	for rows.Next() {
+		var session models.Session
+		var status string
+		var completedAt *time.Time
+		err := rows.Scan(&session.ID, &session.TableID, &session.CreatedAt, &completedAt, &status)
+		if err != nil {
+			return nil, err
+		}
+		session.Status = models.SessionStatus(status)
+		session.CompletedAt = completedAt
+		sessions = append(sessions, &session)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return sessions, nil
+}
+
+// GetActiveSessionsByTable retrieves only active sessions for a specific table
+func (r *postgresRepository) GetActiveSessionsByTable(ctx context.Context, tableID int) ([]*models.Session, error) {
+	rows, err := r.db.QueryContext(ctx, "SELECT id, table_id, created_at, completed_at, status FROM sessions WHERE table_id = $1 AND status = $2 ORDER BY created_at DESC", tableID, models.StatusActive)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var sessions []*models.Session
+	for rows.Next() {
+		var session models.Session
+		var status string
+		var completedAt *time.Time
+		err := rows.Scan(&session.ID, &session.TableID, &session.CreatedAt, &completedAt, &status)
+		if err != nil {
+			return nil, err
+		}
+		session.Status = models.SessionStatus(status)
+		session.CompletedAt = completedAt
+		sessions = append(sessions, &session)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return sessions, nil
+}
+
+// DeleteSession deletes a session by ID
+func (r *postgresRepository) DeleteSession(ctx context.Context, id uuid.UUID) error {
+	_, err := r.db.ExecContext(ctx, "DELETE FROM sessions WHERE id = $1", id)
+	return err
 }

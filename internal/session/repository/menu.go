@@ -3,10 +3,11 @@ package repository
 import (
 	"context"
 	"database/sql"
-	"errors"
+	"restaurant/internal/errors"
 	"restaurant/internal/session/models"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 )
 
 // MenuRepository defines methods for menu item database operations
@@ -42,11 +43,8 @@ type MenuRepository interface {
 
 	CategoryIDByName(ctx context.Context, name string) (uuid.UUID, error)
 
-	CategoryIDByNameCareateIfNotPresent(ctx context.Context, name string) (uuid.UUID, error)
+	CategoryIDByNameCreateIfNotPresent(ctx context.Context, name string) (uuid.UUID, error)
 }
-
-// ErrMenuItemNotFound is returned when a menu item is not found
-var ErrMenuItemNotFound = errors.New("menu item not found")
 
 // postgresMenuRepository implements MenuRepository using PostgreSQL
 type postgresMenuRepository struct {
@@ -71,9 +69,9 @@ func (r *postgresMenuRepository) GetMenuItem(ctx context.Context, id uuid.UUID) 
 		&item.ID, &item.Name, &item.Description, &item.Price, &item.AvalabilityStatus, &item.CategoryID, &item.CreatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, ErrMenuItemNotFound
+			return nil, errors.ErrMenuItemNotFound
 		}
-		return nil, err
+		return nil, errors.NewInternalError("failed to get menu item", err)
 	}
 	return &item, nil
 }
@@ -135,7 +133,7 @@ func (r *postgresMenuRepository) DeleteMenuItem(ctx context.Context, id uuid.UUI
 }
 
 func (r *postgresMenuRepository) ListCategories(ctx context.Context) ([]models.Category, error) {
-	rows, err := r.db.QueryContext(ctx, "SELECT (id, name)  FROM categories ORDER BY name")
+	rows, err := r.db.QueryContext(ctx, "SELECT id, name FROM categories ORDER BY name")
 	if err != nil {
 		return nil, err
 	}
@@ -178,19 +176,27 @@ func (r *postgresMenuRepository) CategoryIDByName(ctx context.Context, name stri
 	var id uuid.UUID
 	err := r.db.QueryRowContext(ctx, "SELECT id FROM categories WHERE name = $1", name).Scan(&id)
 	if err != nil {
-		return uuid.Nil, err
+		if err == sql.ErrNoRows {
+			return uuid.Nil, errors.ErrCategoryNotFound
+		}
+		return uuid.Nil, errors.NewInternalError("failed to get category", err)
 	}
 	return id, nil
 }
 
-func (r *postgresMenuRepository) CategoryIDByNameCareateIfNotPresent(ctx context.Context, name string) (uuid.UUID, error) {
+func (r *postgresMenuRepository) CategoryIDByNameCreateIfNotPresent(ctx context.Context, name string) (uuid.UUID, error) {
 	id, err := r.CategoryIDByName(ctx, name)
-	if err == sql.ErrNoRows {
+	if err == errors.ErrCategoryNotFound {
 		// Create new category
 		newID := uuid.New()
 		err = r.CreateCategory(ctx, name, newID)
 		if err != nil {
-			return uuid.Nil, err
+			// Check if it's a UNIQUE constraint violation
+			if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23505" {
+				// Category was created by another request, try to get it
+				return r.CategoryIDByName(ctx, name)
+			}
+			return uuid.Nil, errors.NewInternalError("failed to create category", err)
 		}
 		return newID, nil
 	} else if err != nil {
