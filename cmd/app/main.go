@@ -9,7 +9,6 @@ package main
 // @contact.email support@example.com
 // @license.name MIT
 // @license.url https://opensource.org/licenses/MIT
-// @host localhost:8080
 // @BasePath /
 
 import (

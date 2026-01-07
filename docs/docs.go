@@ -202,6 +202,56 @@ const docTemplate = `{
                 }
             }
         },
+        "/menu/categories/id/{id}": {
+            "get": {
+                "description": "Get category details by ID",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Menu"
+                ],
+                "summary": "Get category by ID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Category ID (UUID)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Category"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/menu/categories/{name}": {
             "get": {
                 "description": "Get category ID by name",
@@ -406,9 +456,9 @@ const docTemplate = `{
                 }
             }
         },
-        "/menu/categories/{name}/id_or_create": {
+        "/menu/category/{name}": {
             "get": {
-                "description": "Get category ID by name, create if not exists",
+                "description": "Get all menu items for a specific category",
                 "consumes": [
                     "application/json"
                 ],
@@ -418,7 +468,7 @@ const docTemplate = `{
                 "tags": [
                     "Menu"
                 ],
-                "summary": "Get category ID or create",
+                "summary": "Get menu items by category",
                 "parameters": [
                     {
                         "type": "string",
@@ -432,12 +482,14 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.MenuItem"
+                            }
                         }
                     },
-                    "400": {
-                        "description": "Bad Request",
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/middleware.ErrorResponse"
                         }
@@ -773,10 +825,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/models.Order"
                         }
                     },
                     "400": {
@@ -1117,6 +1166,55 @@ const docTemplate = `{
                 }
             }
         },
+        "/sessions/tables/bulk": {
+            "post": {
+                "description": "Create multiple tables in a specified range",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Tables"
+                ],
+                "summary": "Bulk create tables",
+                "parameters": [
+                    {
+                        "description": "Bulk create tables request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/validation.BulkCreateTablesRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/middleware.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/sessions/tables/{id}": {
             "get": {
                 "description": "Retrieve a specific table by its ID",
@@ -1334,13 +1432,10 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "OK",
+                    "204": {
+                        "description": "No Content",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "type": "string"
                         }
                     },
                     "404": {
@@ -1548,7 +1643,7 @@ const docTemplate = `{
         "models.MenuItem": {
             "type": "object",
             "properties": {
-                "avalabilityStatus": {
+                "availability_status": {
                     "description": "status of the menu item in stock (e.g., \"in_stock\", \"out_of_stock\")",
                     "allOf": [
                         {
@@ -1556,11 +1651,11 @@ const docTemplate = `{
                         }
                     ]
                 },
-                "categoryID": {
+                "category_id": {
                     "description": "category of the menu item",
                     "type": "string"
                 },
-                "createdAt": {
+                "created_at": {
                     "description": "when the menu item was created",
                     "type": "string"
                 },
@@ -1578,15 +1673,14 @@ const docTemplate = `{
                 },
                 "price": {
                     "description": "price of the menu item",
-                    "type": "number",
-                    "format": "float64"
+                    "type": "number"
                 }
             }
         },
         "models.Order": {
             "type": "object",
             "properties": {
-                "createdAt": {
+                "created_at": {
                     "description": "when the order was created",
                     "type": "string"
                 },
@@ -1594,7 +1688,7 @@ const docTemplate = `{
                     "description": "unique order ID",
                     "type": "string"
                 },
-                "sessionID": {
+                "session_id": {
                     "description": "associated session ID",
                     "type": "string"
                 },
@@ -1615,11 +1709,11 @@ const docTemplate = `{
                     "description": "unique order ID",
                     "type": "string"
                 },
-                "menuItemID": {
+                "menu_item_id": {
                     "description": "associated menu item ID",
                     "type": "string"
                 },
-                "orderID": {
+                "order_id": {
                     "description": "associated order ID",
                     "type": "string"
                 },
@@ -1649,11 +1743,11 @@ const docTemplate = `{
         "models.Session": {
             "type": "object",
             "properties": {
-                "completedAt": {
+                "completed_at": {
                     "description": "when the session was completed, nil if not completed",
                     "type": "string"
                 },
-                "createdAt": {
+                "created_at": {
                     "description": "when the session was created",
                     "type": "string"
                 },
@@ -1669,7 +1763,7 @@ const docTemplate = `{
                         }
                     ]
                 },
-                "tableID": {
+                "table_id": {
                     "description": "which table this session is for",
                     "type": "integer"
                 }
@@ -1696,6 +1790,23 @@ const docTemplate = `{
                 "id": {
                     "description": "table number (primary key)",
                     "type": "integer"
+                }
+            }
+        },
+        "validation.BulkCreateTablesRequest": {
+            "type": "object",
+            "required": [
+                "end",
+                "start"
+            ],
+            "properties": {
+                "end": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "start": {
+                    "type": "integer",
+                    "minimum": 1
                 }
             }
         },
@@ -1728,8 +1839,7 @@ const docTemplate = `{
             "required": [
                 "category",
                 "name",
-                "price",
-                "status"
+                "price"
             ],
             "properties": {
                 "category": {
@@ -1752,9 +1862,8 @@ const docTemplate = `{
                 "status": {
                     "type": "string",
                     "enum": [
-                        "available",
-                        "unavailable",
-                        "discontinued"
+                        "in_stock",
+                        "out_of_stock"
                     ]
                 }
             }
@@ -1763,14 +1872,10 @@ const docTemplate = `{
             "type": "object",
             "required": [
                 "menu_item_id",
-                "order_id",
                 "quantity"
             ],
             "properties": {
                 "menu_item_id": {
-                    "type": "string"
-                },
-                "order_id": {
                     "type": "string"
                 },
                 "quantity": {
@@ -1828,6 +1933,13 @@ const docTemplate = `{
         "validation.UpdateMenuItemRequest": {
             "type": "object",
             "properties": {
+                "availability_status": {
+                    "type": "string",
+                    "enum": [
+                        "in_stock",
+                        "out_of_stock"
+                    ]
+                },
                 "category": {
                     "type": "string",
                     "maxLength": 100,
@@ -1896,7 +2008,7 @@ const docTemplate = `{
 // SwaggerInfo holds exported Swagger Info so clients can modify it
 var SwaggerInfo = &swag.Spec{
 	Version:          "1.0",
-	Host:             "localhost:8080",
+	Host:             "",
 	BasePath:         "/",
 	Schemes:          []string{},
 	Title:            "Restaurant Management API",

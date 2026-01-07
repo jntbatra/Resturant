@@ -26,14 +26,14 @@ definitions:
     - ItemStatusOutOfStock
   models.MenuItem:
     properties:
-      avalabilityStatus:
+      availability_status:
         allOf:
         - $ref: '#/definitions/models.ItemStatus'
         description: status of the menu item in stock (e.g., "in_stock", "out_of_stock")
-      categoryID:
+      category_id:
         description: category of the menu item
         type: string
-      createdAt:
+      created_at:
         description: when the menu item was created
         type: string
       description:
@@ -47,18 +47,17 @@ definitions:
         type: string
       price:
         description: price of the menu item
-        format: float64
         type: number
     type: object
   models.Order:
     properties:
-      createdAt:
+      created_at:
         description: when the order was created
         type: string
       id:
         description: unique order ID
         type: string
-      sessionID:
+      session_id:
         description: associated session ID
         type: string
       status:
@@ -71,10 +70,10 @@ definitions:
       id:
         description: unique order ID
         type: string
-      menuItemID:
+      menu_item_id:
         description: associated menu item ID
         type: string
-      orderID:
+      order_id:
         description: associated order ID
         type: string
       quantity:
@@ -97,10 +96,10 @@ definitions:
     - OrderStatusCancelled
   models.Session:
     properties:
-      completedAt:
+      completed_at:
         description: when the session was completed, nil if not completed
         type: string
-      createdAt:
+      created_at:
         description: when the session was created
         type: string
       id:
@@ -110,7 +109,7 @@ definitions:
         allOf:
         - $ref: '#/definitions/models.SessionStatus'
         description: e.g., StatusActive, StatusCompleted, or StatusPending
-      tableID:
+      table_id:
         description: which table this session is for
         type: integer
     type: object
@@ -131,6 +130,18 @@ definitions:
       id:
         description: table number (primary key)
         type: integer
+    type: object
+  validation.BulkCreateTablesRequest:
+    properties:
+      end:
+        minimum: 1
+        type: integer
+      start:
+        minimum: 1
+        type: integer
+    required:
+    - end
+    - start
     type: object
   validation.ChangeSessionTableRequest:
     properties:
@@ -165,27 +176,22 @@ definitions:
         type: number
       status:
         enum:
-        - available
-        - unavailable
-        - discontinued
+        - in_stock
+        - out_of_stock
         type: string
     required:
     - category
     - name
     - price
-    - status
     type: object
   validation.CreateOrderItemRequest:
     properties:
       menu_item_id:
         type: string
-      order_id:
-        type: string
       quantity:
         type: integer
     required:
     - menu_item_id
-    - order_id
     - quantity
     type: object
   validation.CreateOrderRequest:
@@ -221,6 +227,11 @@ definitions:
     type: object
   validation.UpdateMenuItemRequest:
     properties:
+      availability_status:
+        enum:
+        - in_stock
+        - out_of_stock
+        type: string
       category:
         maxLength: 100
         minLength: 1
@@ -262,7 +273,6 @@ definitions:
     required:
     - status
     type: object
-host: localhost:8080
 info:
   contact:
     email: support@example.com
@@ -624,11 +634,44 @@ paths:
       summary: Get category ID by name
       tags:
       - Menu
-  /menu/categories/{name}/id_or_create:
+  /menu/categories/id/{id}:
     get:
       consumes:
       - application/json
-      description: Get category ID by name, create if not exists
+      description: Get category details by ID
+      parameters:
+      - description: Category ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Category'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      summary: Get category by ID
+      tags:
+      - Menu
+  /menu/category/{name}:
+    get:
+      consumes:
+      - application/json
+      description: Get all menu items for a specific category
       parameters:
       - description: Category name
         in: path
@@ -641,17 +684,18 @@ paths:
         "200":
           description: OK
           schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
+            items:
+              $ref: '#/definitions/models.MenuItem'
+            type: array
+        "404":
+          description: Not Found
           schema:
             $ref: '#/definitions/middleware.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
             $ref: '#/definitions/middleware.ErrorResponse'
-      summary: Get category ID or create
+      summary: Get menu items by category
       tags:
       - Menu
   /orders:
@@ -772,9 +816,7 @@ paths:
         "200":
           description: OK
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/models.Order'
         "400":
           description: Bad Request
           schema:
@@ -928,12 +970,10 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
-          description: OK
+        "204":
+          description: No Content
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            type: string
         "404":
           description: Not Found
           schema:
@@ -1256,6 +1296,38 @@ paths:
           schema:
             $ref: '#/definitions/middleware.ErrorResponse'
       summary: Get table by ID
+      tags:
+      - Tables
+  /sessions/tables/bulk:
+    post:
+      consumes:
+      - application/json
+      description: Create multiple tables in a specified range
+      parameters:
+      - description: Bulk create tables request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/validation.BulkCreateTablesRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      summary: Bulk create tables
       tags:
       - Tables
 swagger: "2.0"
