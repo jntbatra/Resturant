@@ -36,6 +36,9 @@ type OrderRepository interface {
 	// CreateOrderItem creates a new order item
 	CreateOrderItem(ctx context.Context, item *models.OrderItems) error
 
+	// UpdateOrderItemQuantity updates the quantity of an existing order item
+	UpdateOrderItemQuantity(ctx context.Context, itemID uuid.UUID, quantity int) error
+
 	// GetOrderItems retrieves order items by order ID
 	GetOrderItems(ctx context.Context, orderID uuid.UUID) ([]*models.OrderItems, error)
 
@@ -174,6 +177,15 @@ func (r *postgresOrderRepository) GetOrderItems(ctx context.Context, orderID uui
 		return nil, err
 	}
 	return items, nil
+}
+
+// UpdateOrderItemQuantity updates the quantity of an existing order item
+func (r *postgresOrderRepository) UpdateOrderItemQuantity(ctx context.Context, itemID uuid.UUID, quantity int) error {
+	_, err := r.db.ExecContext(ctx, "UPDATE order_items SET quantity = $1 WHERE id = $2", quantity, itemID)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // CreateOrderWithItems atomically creates an order and its items in a transaction

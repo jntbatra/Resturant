@@ -6,7 +6,7 @@ type CreateMenuItemRequest struct {
 	Description string  `json:"description" validate:"max=1000"`
 	Price       float64 `json:"price" validate:"required,gt=0"`
 	Category    string  `json:"category" validate:"required,min=1,max=100"`
-	Status      string  `json:"status" validate:"required,oneof=available unavailable discontinued"`
+	Status      string  `json:"status" validate:"oneof=in_stock out_of_stock"`
 }
 
 // UpdateMenuItemRequest represents the request to update a menu item
@@ -15,12 +15,13 @@ type UpdateMenuItemRequest struct {
 	Description string  `json:"description" validate:"omitempty,max=1000"`
 	Price       float64 `json:"price" validate:"omitempty,gt=0"`
 	Category    string  `json:"category" validate:"omitempty,min=1,max=100"`
+	Status      string  `json:"availability_status" validate:"omitempty,oneof=in_stock out_of_stock"`
 }
 
 // ListMenuItemsRequest represents the request to list menu items with pagination
 type ListMenuItemsRequest struct {
-	Offset   int    `json:"offset" validate:"min=0"`
-	Limit    int    `json:"limit" validate:"required,min=1,max=100"`
+	Offset int `json:"offset" validate:"min=0"`
+	Limit  int `json:"limit" validate:"min=1,max=100"`
 }
 
 // CreateCategoryRequest represents the request to create a category
@@ -37,10 +38,6 @@ type UpdateCategoryRequest struct {
 type CategoryIDByNameRequest struct {
 	Name string `query:"name" validate:"required,min=1,max=100"`
 }
-
-
-
-
 
 // ValidateCreateMenuItem validates the create menu item request
 func ValidateCreateMenuItem(req CreateMenuItemRequest) error {

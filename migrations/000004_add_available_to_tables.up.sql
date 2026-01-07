@@ -1,0 +1,2 @@
+-- Migration removed: table availability is now calculated dynamically
+-- No longer storing available column in tables table

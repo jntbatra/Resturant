@@ -1,0 +1,2 @@
+-- Migration removed: table availability is now calculated dynamically
+-- No down migration needed since we never added the column

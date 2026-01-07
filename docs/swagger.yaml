@@ -262,14 +262,6 @@ definitions:
     required:
     - status
     type: object
-  validation.UpdateTableRequest:
-    properties:
-      id:
-        minimum: 1
-        type: integer
-    required:
-    - id
-    type: object
 host: localhost:8080
 info:
   contact:
@@ -1145,7 +1137,7 @@ paths:
       summary: Get sessions for a table
       tags:
       - Sessions
-  /tables:
+  /sessions/tables:
     get:
       consumes:
       - application/json
@@ -1199,7 +1191,7 @@ paths:
       summary: Create a new table
       tags:
       - Tables
-  /tables/{id}:
+  /sessions/tables/{id}:
     delete:
       consumes:
       - application/json
@@ -1264,48 +1256,6 @@ paths:
           schema:
             $ref: '#/definitions/middleware.ErrorResponse'
       summary: Get table by ID
-      tags:
-      - Tables
-    put:
-      consumes:
-      - application/json
-      description: Update an existing restaurant table
-      parameters:
-      - description: Table ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      - description: Table update request
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/validation.UpdateTableRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.Table'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/middleware.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/middleware.ErrorResponse'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/middleware.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/middleware.ErrorResponse'
-      summary: Update a table
       tags:
       - Tables
 swagger: "2.0"

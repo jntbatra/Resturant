@@ -16,7 +16,7 @@ type OrderService interface {
 	CreateOrder(ctx context.Context, sessionID uuid.UUID) (*models.Order, error)
 	GetOrder(ctx context.Context, id uuid.UUID) (*models.Order, error)
 	ListOrders(ctx context.Context, limit int, offset int) ([]*models.Order, error)
-	UpdateOrder(ctx context.Context, orderID uuid.UUID, status string) error
+	UpdateOrder(ctx context.Context, orderID uuid.UUID, status string) (*models.Order, error)
 	CreateOrderItem(ctx context.Context, itemID uuid.UUID, quantity int, orderID uuid.UUID) (*models.OrderItems, error)
 	GetOrderItems(ctx context.Context, orderID uuid.UUID) ([]*models.OrderItems, error)
 	GetOrdersBySession(ctx context.Context, sessionID uuid.UUID) ([]*models.Order, error)
@@ -25,15 +25,17 @@ type OrderService interface {
 
 // orderService implements OrderService
 type orderService struct {
-	repo        repository.OrderRepository
-	menuService MenuService
+	repo           repository.OrderRepository
+	menuService    MenuService
+	sessionService SessionService
 }
 
 // NewOrderService creates a new order service
-func NewOrderService(repo repository.OrderRepository, menuService MenuService) OrderService {
+func NewOrderService(repo repository.OrderRepository, menuService MenuService, sessionService SessionService) OrderService {
 	return &orderService{
-		repo:        repo,
-		menuService: menuService,
+		repo:           repo,
+		menuService:    menuService,
+		sessionService: sessionService,
 	}
 }
 
@@ -41,6 +43,12 @@ func NewOrderService(repo repository.OrderRepository, menuService MenuService) O
 
 // CreateOrder creates a new order for the given session ID with validation
 func (s *orderService) CreateOrder(ctx context.Context, sessionID uuid.UUID) (*models.Order, error) {
+	// Validate that the session exists
+	_, err := s.sessionService.GetSession(ctx, sessionID)
+	if err != nil {
+		return nil, apperrors.NewNotFoundError("session not found")
+	}
+
 	// Create new order with generated UUID, initial status 'cart', and current timestamp
 	order := &models.Order{
 		ID:        uuid.New(),
@@ -49,12 +57,8 @@ func (s *orderService) CreateOrder(ctx context.Context, sessionID uuid.UUID) (*m
 		CreatedAt: time.Now(),
 	}
 	// Persist the order in the repository
-	err := s.repo.CreateOrder(ctx, order)
+	err = s.repo.CreateOrder(ctx, order)
 	if err != nil {
-		// Check for foreign key constraint violation
-		if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23503" {
-			return nil, apperrors.ErrForeignKeyViolation
-		}
 		return nil, apperrors.WrapError(500, "failed to create order", err)
 	}
 	return order, nil
@@ -82,19 +86,84 @@ func (s *orderService) ListOrders(ctx context.Context, limit int, offset int) ([
 }
 
 // UpdateOrder updates an order status with validation
-func (s *orderService) UpdateOrder(ctx context.Context, orderID uuid.UUID, status string) error {
-	// Shape validation (status oneof) already done by handler using ValidateStruct
-	// Update order status in repository
-	err := s.repo.UpdateOrder(ctx, orderID, status)
+func (s *orderService) UpdateOrder(ctx context.Context, orderID uuid.UUID, status string) (*models.Order, error) {
+	// Get current order to validate state transition
+	currentOrder, err := s.repo.GetOrder(ctx, orderID)
 	if err != nil {
-		return apperrors.WrapError(500, "failed to update order status", err)
+		return nil, apperrors.WrapError(500, "failed to retrieve order", err)
 	}
+
+	// Validate state transition
+	if err := s.validateOrderStatusTransition(currentOrder, models.OrderStatus(status)); err != nil {
+		return nil, err
+	}
+
+	// Update order status in repository
+	err = s.repo.UpdateOrder(ctx, orderID, status)
+	if err != nil {
+		return nil, apperrors.WrapError(500, "failed to update order status", err)
+	}
+
+	// Retrieve the updated order
+	updatedOrder, err := s.repo.GetOrder(ctx, orderID)
+	if err != nil {
+		return nil, apperrors.WrapError(500, "failed to retrieve updated order", err)
+	}
+
+	return updatedOrder, nil
+}
+
+// validateOrderStatusTransition validates order status transitions
+func (s *orderService) validateOrderStatusTransition(order *models.Order, newStatus models.OrderStatus) error {
+	currentStatus := order.Status
+
+	// Allow transition to cancelled from any state, but check time limit
+	if newStatus == models.OrderStatusCancelled {
+		if time.Since(order.CreatedAt) > 30*time.Second {
+			return apperrors.NewValidationError("orders can only be cancelled within 30 seconds of creation")
+		}
+		return nil
+	}
+
+	// Define valid forward transitions
+	switch currentStatus {
+	case models.OrderStatusCart:
+		if newStatus != models.OrderStatusPending {
+			return apperrors.NewValidationError("cart orders can only transition to pending")
+		}
+	case models.OrderStatusPending:
+		if newStatus != models.OrderStatusPreparing {
+			return apperrors.NewValidationError("pending orders can only transition to preparing")
+		}
+	case models.OrderStatusPreparing:
+		if newStatus != models.OrderStatusServed {
+			return apperrors.NewValidationError("preparing orders can only transition to served")
+		}
+	case models.OrderStatusServed:
+		return apperrors.NewValidationError("served orders cannot be updated")
+	case models.OrderStatusCancelled:
+		return apperrors.NewValidationError("cancelled orders cannot be updated")
+	default:
+		return apperrors.NewValidationError("invalid current order status")
+	}
+
 	return nil
 }
 
-// CreateOrderItem creates a new order item with validation
+// CreateOrderItem creates a new order item with validation or updates quantity if item already exists
 func (s *orderService) CreateOrderItem(ctx context.Context, itemID uuid.UUID, quantity int, orderID uuid.UUID) (*models.OrderItems, error) {
 	// Shape validation (quantity > 0) already done by handler using ValidateStruct
+
+	// Get the order to check its status
+	order, err := s.repo.GetOrder(ctx, orderID)
+	if err != nil {
+		return nil, apperrors.WrapError(500, "failed to retrieve order", err)
+	}
+
+	// Only allow adding items if order is in cart status
+	if order.Status != models.OrderStatusCart {
+		return nil, apperrors.NewValidationError("can only add items to orders in cart status")
+	}
 
 	// Validate menu item exists and is available (BUSINESS LOGIC)
 	menuItem, err := s.menuService.GetMenuItem(ctx, itemID)
@@ -105,7 +174,28 @@ func (s *orderService) CreateOrderItem(ctx context.Context, itemID uuid.UUID, qu
 		return nil, apperrors.ErrOutOfStock
 	}
 
-	// Create order item with generated UUID
+	// Check if this menu item already exists in the order
+	existingItems, err := s.repo.GetOrderItems(ctx, orderID)
+	if err != nil {
+		return nil, apperrors.WrapError(500, "failed to check existing order items", err)
+	}
+
+	// Look for existing item with same menu_item_id
+	for _, item := range existingItems {
+		if item.MenuItemID == itemID {
+			// Update existing item's quantity
+			newQuantity := item.Quantity + quantity
+			err = s.repo.UpdateOrderItemQuantity(ctx, item.ID, newQuantity)
+			if err != nil {
+				return nil, apperrors.WrapError(500, "failed to update order item quantity", err)
+			}
+			// Return the updated item
+			item.Quantity = newQuantity
+			return item, nil
+		}
+	}
+
+	// Create new order item if it doesn't exist
 	Item := &models.OrderItems{
 		ID:         uuid.New(),
 		MenuItemID: itemID,
@@ -121,6 +211,7 @@ func (s *orderService) CreateOrderItem(ctx context.Context, itemID uuid.UUID, qu
 		}
 		return nil, apperrors.WrapError(500, "failed to create order item", err)
 	}
+
 	return Item, nil
 }
 

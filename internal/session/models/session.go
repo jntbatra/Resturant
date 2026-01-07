@@ -18,20 +18,20 @@ const (
 
 // Session represents a dining session started by QR scan
 type Session struct {
-	ID          uuid.UUID     // unique session ID (UUID)
-	TableID     int           // which table this session is for
-	CreatedAt   time.Time     // when the session was created
-	CompletedAt *time.Time    // when the session was completed, nil if not completed
-	Status      SessionStatus // e.g., StatusActive, StatusCompleted, or StatusPending
+	ID          uuid.UUID     `json:"id"`           // unique session ID (UUID)
+	TableID     int           `json:"table_id"`     // which table this session is for
+	CreatedAt   time.Time     `json:"created_at"`   // when the session was created
+	CompletedAt *time.Time    `json:"completed_at"` // when the session was completed, nil if not completed
+	Status      SessionStatus `json:"status"`       // e.g., StatusActive, StatusCompleted, or StatusPending
 }
 
 type Bill struct {
-	ID        uuid.UUID
-	SessionID uuid.UUID
-	Total     float64
-	Subtotal  float64
-	Tax       float64
-	CreatedAt time.Time
+	ID        uuid.UUID `json:"id"`
+	SessionID uuid.UUID `json:"session_id"`
+	Total     float64   `json:"total"`
+	Subtotal  float64   `json:"subtotal"`
+	Tax       float64   `json:"tax"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // Table represents a physical table in the restaurant
@@ -41,10 +41,5 @@ type Table struct {
 
 // CreateTableRequest represents the request to create a new table
 type CreateTableRequest struct {
-	ID int `json:"id" validate:"required,min=1" db:"id"`
-}
-
-// UpdateTableRequest represents the request to update an existing table
-type UpdateTableRequest struct {
 	ID int `json:"id" validate:"required,min=1" db:"id"`
 }

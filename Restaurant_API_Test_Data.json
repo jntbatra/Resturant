@@ -1,0 +1,47 @@
+[
+  {
+    "category_name": "Appetizers",
+    "menu_item_name": "Caesar Salad",
+    "menu_item_description": "Fresh romaine lettuce with Caesar dressing",
+    "menu_item_price": "12.99",
+    "session_status": "active",
+    "order_status": "pending",
+    "item_quantity": "2"
+  },
+  {
+    "category_name": "Main Courses",
+    "menu_item_name": "Grilled Salmon",
+    "menu_item_description": "Fresh Atlantic salmon with herbs",
+    "menu_item_price": "24.99",
+    "session_status": "active",
+    "order_status": "preparing",
+    "item_quantity": "1"
+  },
+  {
+    "category_name": "Desserts",
+    "menu_item_name": "Chocolate Cake",
+    "menu_item_description": "Rich chocolate cake with vanilla frosting",
+    "menu_item_price": "8.99",
+    "session_status": "completed",
+    "order_status": "served",
+    "item_quantity": "3"
+  },
+  {
+    "category_name": "Beverages",
+    "menu_item_name": "Craft Beer",
+    "menu_item_description": "Local craft beer on tap",
+    "menu_item_price": "6.50",
+    "session_status": "active",
+    "order_status": "pending",
+    "item_quantity": "4"
+  },
+  {
+    "category_name": "Pasta",
+    "menu_item_name": "Spaghetti Carbonara",
+    "menu_item_description": "Classic Italian pasta with pancetta and eggs",
+    "menu_item_price": "18.99",
+    "session_status": "completed",
+    "order_status": "delivered",
+    "item_quantity": "1"
+  }
+]

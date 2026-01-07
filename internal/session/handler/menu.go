@@ -1,11 +1,13 @@
 package handler
 
 import (
+	"fmt"
 	"restaurant/internal/errors"
 	"restaurant/internal/middleware"
 	"restaurant/internal/session/models"
 	"restaurant/internal/session/service"
 	"restaurant/internal/session/validation"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -27,19 +29,19 @@ func (h *MenuHandler) RegisterRoutes(router *gin.Engine) {
 		menuGroup.GET("", h.ListMenuItems)
 		menuGroup.POST("", h.CreateMenuItem)
 		menuGroup.GET("/:id", h.GetMenuItem)
+		menuGroup.GET("/category/:name", h.GetMenuItemsByCategory)
 		menuGroup.PUT("/:id", h.UpdateMenuItem)
 		menuGroup.DELETE("/:id", h.DeleteMenuItem)
-
-		categoryGroup := menuGroup.Group("/categories")
-		{
-			categoryGroup.GET("", h.ListCategories)
-			categoryGroup.POST("", h.CreateCategory)
-			categoryGroup.GET("/:name", h.GetCategoryByName)
-			categoryGroup.PUT("/:name", h.UpdateCategory)
-			categoryGroup.DELETE("/:name", h.DeleteCategory)
-			categoryGroup.GET("/:name/id", h.CategoryIDByName)
-			categoryGroup.GET("/:name/id_or_create", h.CategoryIDorCreate)
-		}
+	}
+	categoryGroup := router.Group("/categories")
+	{
+		categoryGroup.GET("", h.ListCategories)
+		categoryGroup.POST("", h.CreateCategory)
+		categoryGroup.GET("/:name", h.GetCategoryByName)
+		categoryGroup.GET("/id/:id", h.GetCategoryByID)
+		categoryGroup.PUT("/:name", h.UpdateCategory)
+		categoryGroup.DELETE("/:name", h.DeleteCategory)
+		categoryGroup.GET("/:name/id", h.CategoryIDByName)
 	}
 }
 
@@ -60,6 +62,19 @@ func (h *MenuHandler) CreateMenuItem(c *gin.Context) {
 		middleware.HandleError(c, errors.NewValidationError(err.Error()))
 		return
 	}
+
+	// Trim whitespace from string fields
+	req.Name = strings.TrimSpace(req.Name)
+	req.Description = strings.TrimSpace(req.Description)
+	req.Category = strings.TrimSpace(req.Category)
+
+	// Set default status if not provided
+	if req.Status == "" {
+		req.Status = "in_stock"
+	}
+
+	// Debug log
+	fmt.Printf("DEBUG: req = %+v\n", req)
 
 	if err := validation.ValidateCreateMenuItem(req); err != nil {
 		middleware.HandleError(c, errors.NewValidationError(err.Error()))
@@ -101,6 +116,33 @@ func (h *MenuHandler) GetMenuItem(c *gin.Context) {
 	c.JSON(200, item)
 }
 
+// GetMenuItemsByCategory handles GET /menu/category/:name
+// @Summary Get menu items by category
+// @Description Get all menu items for a specific category
+// @Tags Menu
+// @Accept json
+// @Produce json
+// @Param name path string true "Category name"
+// @Success 200 {array} models.MenuItem
+// @Failure 404 {object} middleware.ErrorResponse
+// @Failure 500 {object} middleware.ErrorResponse
+// @Router /menu/category/{name} [get]
+func (h *MenuHandler) GetMenuItemsByCategory(c *gin.Context) {
+	name := c.Param("name")
+	if name == "" {
+		middleware.HandleError(c, errors.ErrInvalidRequest)
+		return
+	}
+
+	items, err := h.svc.GetMenuItemsByCategory(c.Request.Context(), name)
+	if err != nil {
+		middleware.HandleError(c, err)
+		return
+	}
+
+	c.JSON(200, items)
+}
+
 // ListMenuItems handles GET /menu
 // @Summary List menu items
 // @Description List all menu items with optional filtering and pagination
@@ -120,6 +162,11 @@ func (h *MenuHandler) ListMenuItems(c *gin.Context) {
 	if err := c.ShouldBindQuery(&req); err != nil {
 		middleware.HandleError(c, errors.NewValidationError(err.Error()))
 		return
+	}
+
+	// Set defaults
+	if req.Limit == 0 {
+		req.Limit = 10
 	}
 
 	if err := validation.ValidateListMenuItems(req); err != nil {
@@ -160,13 +207,18 @@ func (h *MenuHandler) UpdateMenuItem(c *gin.Context) {
 		return
 	}
 
+	// Trim whitespace from string fields
+	req.Name = strings.TrimSpace(req.Name)
+	req.Description = strings.TrimSpace(req.Description)
+	req.Category = strings.TrimSpace(req.Category)
+
 	if err := validation.ValidateUpdateMenuItem(req); err != nil {
 		middleware.HandleError(c, errors.NewValidationError(err.Error()))
 		return
 	}
 
 	var err error
-	err = h.svc.UpdateMenuItem(c.Request.Context(), id, req.Name, req.Description, req.Category, req.Price, models.ItemStatus("in_stock"))
+	err = h.svc.UpdateMenuItem(c.Request.Context(), id, req.Name, req.Description, req.Category, req.Price, models.ItemStatus(req.Status))
 	if err != nil {
 		middleware.HandleError(c, err)
 		return
@@ -198,7 +250,7 @@ func (h *MenuHandler) DeleteMenuItem(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Menu item deleted successfully"})
+	c.JSON(204, gin.H{"message": "Menu item deleted successfully"})
 }
 
 // ListCategories handles GET /menu/categories
@@ -247,6 +299,33 @@ func (h *MenuHandler) GetCategoryByName(c *gin.Context) {
 	}
 
 	c.JSON(200, gin.H{"name": name, "id": id})
+}
+
+// GetCategoryByID handles GET /menu/categories/id/:id
+// @Summary Get category by ID
+// @Description Get category details by ID
+// @Tags Menu
+// @Accept json
+// @Produce json
+// @Param id path string true "Category ID (UUID)"
+// @Success 200 {object} models.Category
+// @Failure 400 {object} middleware.ErrorResponse
+// @Failure 404 {object} middleware.ErrorResponse
+// @Failure 500 {object} middleware.ErrorResponse
+// @Router /menu/categories/id/{id} [get]
+func (h *MenuHandler) GetCategoryByID(c *gin.Context) {
+	id, ok := middleware.UUIDParam(c, "id")
+	if !ok {
+		return
+	}
+
+	category, err := h.svc.GetCategoryByID(c.Request.Context(), id)
+	if err != nil {
+		middleware.HandleError(c, err)
+		return
+	}
+
+	c.JSON(200, category)
 }
 
 // CreateCategory handles POST /menu/categories
@@ -309,13 +388,13 @@ func (h *MenuHandler) UpdateCategory(c *gin.Context) {
 		return
 	}
 
-	err := h.svc.UpdateCategory(c.Request.Context(), old_name, req.Name)
+	category, err := h.svc.UpdateCategory(c.Request.Context(), old_name, req.Name)
 	if err != nil {
 		middleware.HandleError(c, err)
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Category updated successfully"})
+	c.JSON(200, category)
 }
 
 // DeleteCategory handles DELETE /menu/categories/:name
@@ -337,7 +416,7 @@ func (h *MenuHandler) DeleteCategory(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Category deleted successfully"})
+	c.JSON(204, gin.H{"message": "Category deleted successfully"})
 }
 
 // CategoryIDByName handles GET /menu/categories/:name/id
@@ -354,6 +433,7 @@ func (h *MenuHandler) DeleteCategory(c *gin.Context) {
 // @Router /menu/categories/{name}/id [get]
 func (h *MenuHandler) CategoryIDByName(c *gin.Context) {
 	name := c.Param("name")
+	name = strings.TrimSpace(name)
 
 	if name == "" {
 		middleware.HandleError(c, errors.NewValidationError("category name is required"))
@@ -361,33 +441,6 @@ func (h *MenuHandler) CategoryIDByName(c *gin.Context) {
 	}
 
 	id, err := h.svc.CategoryIDByName(c.Request.Context(), name)
-	if err != nil {
-		middleware.HandleError(c, err)
-		return
-	}
-	c.JSON(200, gin.H{"id": id})
-}
-
-// CategoryIDorCreate handles GET /menu/categories/:name/id_or_create
-// @Summary Get category ID or create
-// @Description Get category ID by name, create if not exists
-// @Tags Menu
-// @Accept json
-// @Produce json
-// @Param name path string true "Category name"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} middleware.ErrorResponse
-// @Failure 500 {object} middleware.ErrorResponse
-// @Router /menu/categories/{name}/id_or_create [get]
-func (h *MenuHandler) CategoryIDorCreate(c *gin.Context) {
-	name := c.Param("name")
-
-	if name == "" {
-		middleware.HandleError(c, errors.NewValidationError("category name is required"))
-		return
-	}
-
-	id, err := h.svc.CategoryIDByNameCreateIfNotPresent(c.Request.Context(), name)
 	if err != nil {
 		middleware.HandleError(c, err)
 		return

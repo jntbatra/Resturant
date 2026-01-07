@@ -5,6 +5,7 @@ import (
 	apperrors "restaurant/internal/errors"
 	"restaurant/internal/session/models"
 	"restaurant/internal/session/repository"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
@@ -27,8 +28,9 @@ type SessionService interface {
 	GetTable(ctx context.Context, id int) (*models.Table, error)
 	GetTableByNumber(ctx context.Context, number int) (*models.Table, error)
 	ListTables(ctx context.Context) ([]*models.Table, error)
-	UpdateTable(ctx context.Context, id int, req *models.UpdateTableRequest) (*models.Table, error)
 	DeleteTable(ctx context.Context, id int) error
+	BulkCreateTables(ctx context.Context, start, end int) error
+	IsTableAvailable(ctx context.Context, tableID int) (bool, error)
 }
 
 // sessionService implements Service
@@ -43,6 +45,15 @@ func NewService(repo repository.Repository) SessionService {
 
 // CreateSession creates a new session
 func (s *sessionService) CreateSession(ctx context.Context, tableID int) (*models.Session, error) {
+	// Check if table is available (no active or pending sessions)
+	available, err := s.IsTableAvailable(ctx, tableID)
+	if err != nil {
+		return nil, apperrors.WrapError(500, "failed to check table availability", err)
+	}
+	if !available {
+		return nil, apperrors.WrapError(409, "table is not available (has active or pending session)", nil)
+	}
+
 	// Shape validation (tableID > 0) already done by handler using ValidateStruct
 	id := uuid.New()
 	session, err := s.repo.CreateSession(ctx, id, tableID)
@@ -53,6 +64,7 @@ func (s *sessionService) CreateSession(ctx context.Context, tableID int) (*model
 		}
 		return nil, apperrors.WrapError(500, "failed to create session", err)
 	}
+
 	return session, nil
 }
 
@@ -102,6 +114,7 @@ func (s *sessionService) UpdateSession(ctx context.Context, id uuid.UUID, status
 	if err != nil {
 		return nil, apperrors.WrapError(500, "failed to update session", err)
 	}
+
 	return s.repo.GetSession(ctx, id)
 }
 
@@ -127,7 +140,17 @@ func (s *sessionService) ListActiveSessions(ctx context.Context) ([]*models.Sess
 // ChangeTable changes the table of a session
 func (s *sessionService) ChangeTable(ctx context.Context, id uuid.UUID, tableNumber int) error {
 	// Shape validation (tableNumber > 0) already done by handler using ValidateStruct
-	err := s.repo.ChangeSessionTable(ctx, id, tableNumber)
+
+	// Check if the new table is available (no active or pending sessions)
+	available, err := s.IsTableAvailable(ctx, tableNumber)
+	if err != nil {
+		return apperrors.WrapError(500, "failed to check table availability", err)
+	}
+	if !available {
+		return apperrors.NewValidationError("table is not available")
+	}
+
+	err = s.repo.ChangeSessionTable(ctx, id, tableNumber)
 	if err != nil {
 		// Check for foreign key constraint violation
 		if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23503" {
@@ -158,9 +181,33 @@ func (s *sessionService) GetActiveSessionsByTable(ctx context.Context, tableID i
 
 // DeleteSession deletes a session by ID
 func (s *sessionService) DeleteSession(ctx context.Context, id uuid.UUID) error {
-	err := s.repo.DeleteSession(ctx, id)
+	// Check if session exists
+	_, err := s.repo.GetSession(ctx, id)
+	if err != nil {
+		// If session not found, return not found error
+		if strings.Contains(err.Error(), "Session not found") {
+			return apperrors.ErrSessionNotFound
+		}
+		return apperrors.WrapError(500, "failed to check session existence", err)
+	}
+
+	// Session exists, proceed to delete
+	err = s.repo.DeleteSession(ctx, id)
 	if err != nil {
 		return apperrors.WrapError(500, "failed to delete session", err)
+	}
+	return nil
+}
+
+// BulkCreateTables creates multiple tables in the specified range
+func (s *sessionService) BulkCreateTables(ctx context.Context, start, end int) error {
+	tableIDs := make([]int, 0, end-start+1)
+	for i := start; i <= end; i++ {
+		tableIDs = append(tableIDs, i)
+	}
+	err := s.repo.BulkCreateTables(ctx, tableIDs)
+	if err != nil {
+		return apperrors.WrapError(500, "failed to bulk create tables", err)
 	}
 	return nil
 }
@@ -205,19 +252,6 @@ func (s *sessionService) ListTables(ctx context.Context) ([]*models.Table, error
 	return tables, nil
 }
 
-// UpdateTable updates an existing table
-func (s *sessionService) UpdateTable(ctx context.Context, id int, req *models.UpdateTableRequest) (*models.Table, error) {
-	table, err := s.repo.UpdateTable(ctx, id, req)
-	if err != nil {
-		// Check for unique constraint violation
-		if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23505" {
-			return nil, apperrors.WrapError(409, "table number already exists", err)
-		}
-		return nil, apperrors.WrapError(500, "failed to update table", err)
-	}
-	return table, nil
-}
-
 // DeleteTable deletes a table
 func (s *sessionService) DeleteTable(ctx context.Context, id int) error {
 	err := s.repo.DeleteTable(ctx, id)
@@ -225,4 +259,13 @@ func (s *sessionService) DeleteTable(ctx context.Context, id int) error {
 		return apperrors.WrapError(500, "failed to delete table", err)
 	}
 	return nil
+}
+
+// IsTableAvailable checks if a table has no active or pending sessions
+func (s *sessionService) IsTableAvailable(ctx context.Context, tableID int) (bool, error) {
+	available, err := s.repo.IsTableAvailable(ctx, tableID)
+	if err != nil {
+		return false, apperrors.WrapError(500, "failed to check table availability", err)
+	}
+	return available, nil
 }

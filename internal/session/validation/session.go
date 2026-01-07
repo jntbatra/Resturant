@@ -61,9 +61,10 @@ type CreateTableRequest struct {
 	ID int `json:"id" validate:"required,min=1"`
 }
 
-// UpdateTableRequest represents the request to update a table
-type UpdateTableRequest struct {
-	ID int `json:"id" validate:"required,min=1"`
+// BulkCreateTablesRequest represents the request to create multiple tables in a range
+type BulkCreateTablesRequest struct {
+	Start int `json:"start" validate:"required,min=1"`
+	End   int `json:"end" validate:"required,min=1"`
 }
 
 // ValidateCreateTable validates the create table request
@@ -71,9 +72,18 @@ func ValidateCreateTable(req CreateTableRequest) error {
 	return ValidateStruct(req)
 }
 
-// ValidateUpdateTable validates the update table request
-func ValidateUpdateTable(req UpdateTableRequest) error {
-	return ValidateStruct(req)
+// ValidateBulkCreateTables validates the bulk create tables request
+func ValidateBulkCreateTables(req BulkCreateTablesRequest) error {
+	if err := ValidateStruct(req); err != nil {
+		return err
+	}
+	if req.Start > req.End {
+		return errors.New("start must be less than or equal to end")
+	}
+	if req.End-req.Start > 100 { // arbitrary limit
+		return errors.New("range too large, max 100 tables")
+	}
+	return nil
 }
 
 // ValidateTableID validates a table ID

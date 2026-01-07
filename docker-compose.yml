@@ -10,7 +10,7 @@ services:
       POSTGRES_PASSWORD: restaurant_password
       POSTGRES_DB: restaurant
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       # Mount migrations to initialize database
       - ./migrations:/docker-entrypoint-initdb.d:ro
@@ -54,11 +54,34 @@ services:
     links:
       - postgres
 
+  # pgAdmin - PostgreSQL Web Admin Interface
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: restaurant-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@restaurant.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    networks:
+      - restaurant-network
+    restart: unless-stopped
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+
 volumes:
   postgres_data:
+    driver: local
+  pgadmin_data:
     driver: local
 
 networks:
   restaurant-network:
     driver: bridge
 
+
+
+# PG

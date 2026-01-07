@@ -25,7 +25,6 @@ type ListOrdersRequest struct {
 
 // CreateOrderItemRequest represents the request to add an item to an order
 type CreateOrderItemRequest struct {
-	OrderID    uuid.UUID `json:"order_id" validate:"required"`
 	MenuItemID uuid.UUID `json:"menu_item_id" validate:"required"`
 	Quantity   int       `json:"quantity" validate:"required,gt=0"`
 }

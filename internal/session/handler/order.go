@@ -148,7 +148,7 @@ func (h *OrderHandler) ListOrders(c *gin.Context) {
 // @Produce json
 // @Param id path string true "Order ID (UUID)"
 // @Param request body validation.UpdateOrderRequest true "Status update request"
-// @Success 200 {object} map[string]string
+// @Success 200 {object} models.Order
 // @Failure 400 {object} middleware.ErrorResponse
 // @Failure 500 {object} middleware.ErrorResponse
 // @Router /orders/{id} [put]
@@ -169,13 +169,13 @@ func (h *OrderHandler) UpdateOrder(c *gin.Context) {
 		return
 	}
 
-	err := h.svc.UpdateOrder(c.Request.Context(), id, string(req.Status))
+	order, err := h.svc.UpdateOrder(c.Request.Context(), id, string(req.Status))
 	if err != nil {
 		middleware.HandleError(c, err)
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Order updated successfully"})
+	c.JSON(200, order)
 }
 
 // CreateOrderItem handles POST /orders/:id/items
@@ -191,6 +191,11 @@ func (h *OrderHandler) UpdateOrder(c *gin.Context) {
 // @Failure 500 {object} middleware.ErrorResponse
 // @Router /orders/{id}/items [post]
 func (h *OrderHandler) CreateOrderItem(c *gin.Context) {
+	orderID, ok := middleware.UUIDParam(c, "id")
+	if !ok {
+		return
+	}
+
 	var req validation.CreateOrderItemRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		middleware.HandleError(c, errors.NewValidationError(err.Error()))
@@ -202,7 +207,7 @@ func (h *OrderHandler) CreateOrderItem(c *gin.Context) {
 		return
 	}
 
-	item, err := h.svc.CreateOrderItem(c.Request.Context(), req.MenuItemID, req.Quantity, req.OrderID)
+	item, err := h.svc.CreateOrderItem(c.Request.Context(), req.MenuItemID, req.Quantity, orderID)
 	if err != nil {
 		middleware.HandleError(c, err)
 		return

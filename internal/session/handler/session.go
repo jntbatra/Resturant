@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -36,15 +37,13 @@ func (h *Handler) RegisterRoutes(router *gin.Engine) {
 		sessionGroup.GET("/table/:tableID", h.GetSessionsByTable)
 		sessionGroup.GET("/table/:tableID/active", h.GetActiveSessionsByTable)
 		sessionGroup.DELETE("/:id", h.DeleteSession)
-	}
 
-	tableGroup := router.Group("/tables")
-	{
-		tableGroup.GET("", h.ListTables)
-		tableGroup.POST("", h.CreateTable)
-		tableGroup.GET("/:id", h.GetTable)
-		tableGroup.PUT("/:id", h.UpdateTable)
-		tableGroup.DELETE("/:id", h.DeleteTable)
+		// Table management routes under sessions
+		sessionGroup.GET("/tables", h.ListTables)
+		sessionGroup.POST("/tables", h.CreateTable)
+		sessionGroup.POST("/tables/bulk", h.BulkCreateTables)
+		sessionGroup.GET("/tables/:id", h.GetTable)
+		sessionGroup.DELETE("/tables/:id", h.DeleteTable)
 	}
 }
 
@@ -77,7 +76,7 @@ func (h *Handler) CreateSession(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, session)
+	c.JSON(201, session)
 }
 
 // GetSession handles GET /sessions/:id
@@ -226,24 +225,24 @@ func (h *Handler) ChangeSessionTable(c *gin.Context) {
 	}
 
 	if err := validation.ValidateSessionID(id); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		middleware.HandleError(c, errors.NewValidationError(err.Error()))
 		return
 	}
 
 	var req validation.ChangeSessionTableRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		middleware.HandleError(c, errors.NewValidationError(err.Error()))
 		return
 	}
 
 	if err := validation.ValidateChangeSessionTable(req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		middleware.HandleError(c, errors.NewValidationError(err.Error()))
 		return
 	}
 
 	err := h.svc.ChangeTable(c.Request.Context(), id, req.TableID)
 	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		middleware.HandleError(c, err)
 		return
 	}
 
@@ -303,7 +302,7 @@ func (h *Handler) GetActiveSessionsByTable(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param id path string true "Session ID (UUID)"
-// @Success 200 {object} map[string]string
+// @Success 204 {string} string "No Content"
 // @Failure 404 {object} middleware.ErrorResponse
 // @Failure 500 {object} middleware.ErrorResponse
 // @Router /sessions/{id} [delete]
@@ -314,20 +313,20 @@ func (h *Handler) DeleteSession(c *gin.Context) {
 	}
 
 	if err := validation.ValidateSessionID(id); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		middleware.HandleError(c, errors.NewValidationError(err.Error()))
 		return
 	}
 
 	err := h.svc.DeleteSession(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		middleware.HandleError(c, err)
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Session deleted successfully"})
+	c.Status(204) // No Content
 }
 
-// CreateTable handles POST /tables
+// CreateTable handles POST /sessions/tables
 // @Summary Create a new table
 // @Description Create a new restaurant table
 // @Tags Tables
@@ -338,7 +337,7 @@ func (h *Handler) DeleteSession(c *gin.Context) {
 // @Failure 400 {object} middleware.ErrorResponse
 // @Failure 409 {object} middleware.ErrorResponse
 // @Failure 500 {object} middleware.ErrorResponse
-// @Router /tables [post]
+// @Router /sessions/tables [post]
 func (h *Handler) CreateTable(c *gin.Context) {
 	var req validation.CreateTableRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -360,7 +359,38 @@ func (h *Handler) CreateTable(c *gin.Context) {
 	c.JSON(http.StatusCreated, table)
 }
 
-// GetTable handles GET /tables/:id
+// BulkCreateTables handles POST /sessions/tables/bulk
+// @Summary Bulk create tables
+// @Description Create multiple tables in a specified range
+// @Tags Tables
+// @Accept json
+// @Produce json
+// @Param request body validation.BulkCreateTablesRequest true "Bulk create tables request"
+// @Success 201 {object} map[string]string
+// @Failure 400 {object} middleware.ErrorResponse
+// @Failure 500 {object} middleware.ErrorResponse
+// @Router /sessions/tables/bulk [post]
+func (h *Handler) BulkCreateTables(c *gin.Context) {
+	var req validation.BulkCreateTablesRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		middleware.HandleError(c, errors.NewValidationError(err.Error()))
+		return
+	}
+
+	if err := validation.ValidateBulkCreateTables(req); err != nil {
+		middleware.HandleError(c, errors.NewValidationError(err.Error()))
+		return
+	}
+
+	err := h.svc.BulkCreateTables(c.Request.Context(), req.Start, req.End)
+	if err != nil {
+		middleware.HandleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"message": fmt.Sprintf("Tables created from %d to %d", req.Start, req.End)})
+}
+
 // @Summary Get table by ID
 // @Description Retrieve a specific table by its ID
 // @Tags Tables
@@ -371,7 +401,7 @@ func (h *Handler) CreateTable(c *gin.Context) {
 // @Failure 400 {object} middleware.ErrorResponse
 // @Failure 404 {object} middleware.ErrorResponse
 // @Failure 500 {object} middleware.ErrorResponse
-// @Router /tables/{id} [get]
+// @Router /sessions/tables/{id} [get]
 func (h *Handler) GetTable(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.Atoi(idStr)
@@ -394,7 +424,7 @@ func (h *Handler) GetTable(c *gin.Context) {
 	c.JSON(http.StatusOK, table)
 }
 
-// ListTables handles GET /tables
+// ListTables handles GET /sessions/tables
 // @Summary List all tables
 // @Description Retrieve all restaurant tables
 // @Tags Tables
@@ -402,7 +432,7 @@ func (h *Handler) GetTable(c *gin.Context) {
 // @Produce json
 // @Success 200 {array} models.Table
 // @Failure 500 {object} middleware.ErrorResponse
-// @Router /tables [get]
+// @Router /sessions/tables [get]
 func (h *Handler) ListTables(c *gin.Context) {
 	tables, err := h.svc.ListTables(c.Request.Context())
 	if err != nil {
@@ -413,54 +443,7 @@ func (h *Handler) ListTables(c *gin.Context) {
 	c.JSON(http.StatusOK, tables)
 }
 
-// UpdateTable handles PUT /tables/:id
-// @Summary Update a table
-// @Description Update an existing restaurant table
-// @Tags Tables
-// @Accept json
-// @Produce json
-// @Param id path int true "Table ID"
-// @Param request body validation.UpdateTableRequest true "Table update request"
-// @Success 200 {object} models.Table
-// @Failure 400 {object} middleware.ErrorResponse
-// @Failure 404 {object} middleware.ErrorResponse
-// @Failure 409 {object} middleware.ErrorResponse
-// @Failure 500 {object} middleware.ErrorResponse
-// @Router /tables/{id} [put]
-func (h *Handler) UpdateTable(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := strconv.Atoi(idStr)
-	if err != nil {
-		middleware.HandleError(c, errors.NewValidationError("invalid table ID"))
-		return
-	}
-
-	if err := validation.ValidateTableID(id); err != nil {
-		middleware.HandleError(c, errors.NewValidationError(err.Error()))
-		return
-	}
-
-	var req validation.UpdateTableRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.HandleError(c, errors.NewValidationError(err.Error()))
-		return
-	}
-
-	if err := validation.ValidateUpdateTable(req); err != nil {
-		middleware.HandleError(c, errors.NewValidationError(err.Error()))
-		return
-	}
-
-	table, err := h.svc.UpdateTable(c.Request.Context(), id, &models.UpdateTableRequest{ID: req.ID})
-	if err != nil {
-		middleware.HandleError(c, err)
-		return
-	}
-
-	c.JSON(http.StatusOK, table)
-}
-
-// DeleteTable handles DELETE /tables/:id
+// DeleteTable handles DELETE /sessions/tables/:id
 // @Summary Delete a table
 // @Description Delete a restaurant table (only if no active sessions)
 // @Tags Tables
@@ -472,7 +455,7 @@ func (h *Handler) UpdateTable(c *gin.Context) {
 // @Failure 404 {object} middleware.ErrorResponse
 // @Failure 409 {object} middleware.ErrorResponse
 // @Failure 500 {object} middleware.ErrorResponse
-// @Router /tables/{id} [delete]
+// @Router /sessions/tables/{id} [delete]
 func (h *Handler) DeleteTable(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.Atoi(idStr)
@@ -492,5 +475,5 @@ func (h *Handler) DeleteTable(c *gin.Context) {
 		return
 	}
 
-	c.Status(http.StatusNoContent)
+	c.JSON(http.StatusOK, gin.H{"message": "Table deleted successfully"})
 }

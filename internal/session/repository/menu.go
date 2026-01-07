@@ -36,6 +36,9 @@ type MenuRepository interface {
 	// CreateCategory creates a new category
 	CreateCategory(ctx context.Context, name string, id uuid.UUID) error
 
+	// GetCategoryByID retrieves a category by ID
+	GetCategoryByID(ctx context.Context, id uuid.UUID) (*models.Category, error)
+
 	// DeleteCategory deletes a category
 	DeleteCategory(ctx context.Context, name string) error
 
@@ -100,7 +103,13 @@ func (r *postgresMenuRepository) ListMenuItems(ctx context.Context, offset int, 
 }
 
 func (r *postgresMenuRepository) GetMenuItemsByCategory(ctx context.Context, category string) ([]*models.MenuItem, error) {
-	rows, err := r.db.QueryContext(ctx, "SELECT id, name, description, price, avalability_status, category, created_at FROM menu_items WHERE category = $1", category)
+	// First get the category ID by name
+	categoryID, err := r.CategoryIDByName(ctx, category)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := r.db.QueryContext(ctx, "SELECT id, name, description, price, avalability_status, category, created_at FROM menu_items WHERE category = $1", categoryID)
 	if err != nil {
 		return nil, err
 	}
@@ -128,8 +137,18 @@ func (r *postgresMenuRepository) UpdateMenuItem(ctx context.Context, item *model
 }
 
 func (r *postgresMenuRepository) DeleteMenuItem(ctx context.Context, id uuid.UUID) error {
-	_, err := r.db.ExecContext(ctx, "DELETE FROM menu_items WHERE id = $1", id)
-	return err
+	result, err := r.db.ExecContext(ctx, "DELETE FROM menu_items WHERE id = $1", id)
+	if err != nil {
+		return err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return errors.ErrMenuItemNotFound
+	}
+	return nil
 }
 
 func (r *postgresMenuRepository) ListCategories(ctx context.Context) ([]models.Category, error) {
@@ -159,22 +178,56 @@ func (r *postgresMenuRepository) CreateCategory(ctx context.Context, name string
 	return err
 }
 
+func (r *postgresMenuRepository) GetCategoryByID(ctx context.Context, id uuid.UUID) (*models.Category, error) {
+	var category models.Category
+	err := r.db.QueryRowContext(ctx, "SELECT id, name FROM categories WHERE id = $1", id).Scan(&category.ID, &category.Name)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, errors.ErrCategoryNotFound
+		}
+		return nil, errors.NewInternalError("failed to get category", err)
+	}
+	return &category, nil
+}
+
 // UpdateCategory updates an existing category name
 func (r *postgresMenuRepository) UpdateCategory(ctx context.Context, old_name string, new_name string) error {
-	_, err := r.db.ExecContext(ctx, "UPDATE categories SET name = $1 WHERE name = $2", new_name, old_name)
-	return err
+	result, err := r.db.ExecContext(ctx, "UPDATE categories SET name = $1 WHERE LOWER(name) = LOWER($2)", new_name, old_name)
+	if err != nil {
+		return err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return errors.ErrCategoryNotFound
+	}
+	return nil
 }
 
 func (r *postgresMenuRepository) DeleteCategory(ctx context.Context, name string) error {
-	// Database foreign key constraint will prevent deletion if category is in use
-	// If deletion fails due to constraint, error will be returned automatically
-	_, err := r.db.ExecContext(ctx, "DELETE FROM categories WHERE name = $1", name)
-	return err
+	result, err := r.db.ExecContext(ctx, "DELETE FROM categories WHERE LOWER(name) = LOWER($1)", name)
+	if err != nil {
+		// Check if it's a foreign key violation
+		if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23503" {
+			return errors.ErrForeignKeyViolation
+		}
+		return err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return errors.ErrCategoryNotFound
+	}
+	return nil
 }
 
 func (r *postgresMenuRepository) CategoryIDByName(ctx context.Context, name string) (uuid.UUID, error) {
 	var id uuid.UUID
-	err := r.db.QueryRowContext(ctx, "SELECT id FROM categories WHERE name = $1", name).Scan(&id)
+	err := r.db.QueryRowContext(ctx, "SELECT id FROM categories WHERE LOWER(name) = LOWER($1)", name).Scan(&id)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return uuid.Nil, errors.ErrCategoryNotFound

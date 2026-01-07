@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"restaurant/internal/session/models"
@@ -46,9 +47,10 @@ type Repository interface {
 	GetTable(ctx context.Context, id int) (*models.Table, error)
 	GetTableByNumber(ctx context.Context, number int) (*models.Table, error)
 	ListTables(ctx context.Context) ([]*models.Table, error)
-	UpdateTable(ctx context.Context, id int, table *models.UpdateTableRequest) (*models.Table, error)
 	DeleteTable(ctx context.Context, id int) error
+	BulkCreateTables(ctx context.Context, tableIDs []int) error
 	TableExists(ctx context.Context, number int) (bool, error)
+	IsTableAvailable(ctx context.Context, tableID int) (bool, error)
 }
 
 // postgresRepository implements Repository using PostgreSQL
@@ -139,7 +141,7 @@ func (r *postgresRepository) ListActiveSessions(ctx context.Context) ([]*models.
 
 // ChangeSessionTable changes the table ID of a session by table number
 func (r *postgresRepository) ChangeSessionTable(ctx context.Context, id uuid.UUID, tableNumber int) error {
-	_, err := r.db.ExecContext(ctx, "UPDATE sessions SET table_id = (SELECT id FROM tables WHERE number = $1) WHERE id = $2", tableNumber, id)
+	_, err := r.db.ExecContext(ctx, "UPDATE sessions SET table_id = $1 WHERE id = $2", tableNumber, id)
 	return err
 }
 
@@ -307,14 +309,6 @@ func (r *postgresRepository) ListTables(ctx context.Context) ([]*models.Table, e
 	return tables, nil
 }
 
-// UpdateTable updates an existing table (since ID is the primary key, this just validates the table exists)
-func (r *postgresRepository) UpdateTable(ctx context.Context, id int, req *models.UpdateTableRequest) (*models.Table, error) {
-	// Since ID is the primary key and represents the table number,
-	// updating would require changing the primary key which is complex
-	// For now, just validate the table exists and return it
-	return r.GetTable(ctx, id)
-}
-
 // DeleteTable deletes a table by ID
 func (r *postgresRepository) DeleteTable(ctx context.Context, id int) error {
 	// Check if table has active sessions
@@ -354,4 +348,39 @@ func (r *postgresRepository) TableExists(ctx context.Context, number int) (bool,
 		return false, fmt.Errorf("failed to check table existence: %w", err)
 	}
 	return count > 0, nil
+}
+
+// BulkCreateTables creates multiple tables in a single query
+func (r *postgresRepository) BulkCreateTables(ctx context.Context, tableIDs []int) error {
+	if len(tableIDs) == 0 {
+		return nil
+	}
+
+	// Build the VALUES clause
+	valueStrings := make([]string, 0, len(tableIDs))
+	valueArgs := make([]interface{}, 0, len(tableIDs))
+	for i, id := range tableIDs {
+		valueStrings = append(valueStrings, fmt.Sprintf("($%d)", i+1))
+		valueArgs = append(valueArgs, id)
+	}
+
+	query := fmt.Sprintf("INSERT INTO tables (id) VALUES %s ON CONFLICT (id) DO NOTHING", strings.Join(valueStrings, ","))
+
+	_, err := r.db.ExecContext(ctx, query, valueArgs...)
+	return err
+}
+
+// IsTableAvailable checks if a table has no active or pending sessions
+func (r *postgresRepository) IsTableAvailable(ctx context.Context, tableID int) (bool, error) {
+	query := `SELECT NOT EXISTS (
+		SELECT 1 FROM sessions
+		WHERE table_id = $1
+			AND status IN ('active', 'pending')
+	)`
+	var available bool
+	err := r.db.QueryRowContext(ctx, query, tableID).Scan(&available)
+	if err != nil {
+		return false, fmt.Errorf("failed to check table availability: %w", err)
+	}
+	return available, nil
 }

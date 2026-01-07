@@ -7,13 +7,13 @@ import (
 )
 
 type MenuItem struct {
-	ID                uuid.UUID  // unique menu item ID
-	Name              string     // name of the menu item
-	Description       string     // description of the menu item
-	Price             float64    // price of the menu item
-	CategoryID        uuid.UUID  // category of the menu item
-	AvalabilityStatus ItemStatus // status of the menu item in stock (e.g., "in_stock", "out_of_stock")
-	CreatedAt         time.Time  // when the menu item was created
+	ID                uuid.UUID  `json:"id"`                  // unique menu item ID
+	Name              string     `json:"name"`                // name of the menu item
+	Description       string     `json:"description"`         // description of the menu item
+	Price             float64    `json:"price"`               // price of the menu item
+	CategoryID        uuid.UUID  `json:"category_id"`         // category of the menu item
+	AvalabilityStatus ItemStatus `json:"availability_status"` // status of the menu item in stock (e.g., "in_stock", "out_of_stock")
+	CreatedAt         time.Time  `json:"created_at"`          // when the menu item was created
 }
 
 type ItemStatus string

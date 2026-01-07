@@ -21,6 +21,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 
 	"github.com/gin-gonic/gin"
@@ -38,6 +39,11 @@ import (
 )
 
 func main() {
+	// Load environment variables from .env file
+	if err := godotenv.Load(".env"); err != nil {
+		log.Printf("Warning: .env file not found or error loading: %v", err)
+	}
+
 	// Initialize shutdown manager
 	shutdownMgr := shutdown.NewManager(30 * time.Second)
 
@@ -100,8 +106,8 @@ func main() {
 
 	// Initialize services with proper dependency injection
 	menuService := service.NewMenuService(menuRepo)
-	orderService := service.NewOrderService(orderRepo, menuService) // Inject menuService for validation
 	sessionService := service.NewService(sessionRepo)
+	orderService := service.NewOrderService(orderRepo, menuService, sessionService) // Inject menuService for validation and sessionService for session validation
 
 	// Initialize handlers
 	menuHandler := handler.NewMenuHandler(menuService)
