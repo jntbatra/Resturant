@@ -182,4 +182,8 @@ go test -cover ./...
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This backend code for the Intellidine Restaurant App is licensed under the
+Creative Commons Attribution-NonCommercial 4.0 International License.
+
+You may not use this work for commercial purposes.  
+See the LICENSE file for full details: <https://creativecommons.org/licenses/by-nc/4.0/>.
