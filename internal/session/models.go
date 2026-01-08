@@ -38,4 +38,3 @@ type Bill struct {
 type Table struct {
 	ID int `json:"id" db:"id"` // table number (primary key)
 }
-
