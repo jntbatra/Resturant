@@ -29,11 +29,11 @@ import (
 
 	_ "restaurant/docs"
 
+	"restaurant/internal/menu"
 	"restaurant/internal/middleware"
+	"restaurant/internal/order"
 	"restaurant/internal/pool"
-	"restaurant/internal/session/handler"
-	"restaurant/internal/session/repository"
-	"restaurant/internal/session/service"
+	"restaurant/internal/session"
 	"restaurant/internal/shutdown"
 )
 
@@ -99,19 +99,19 @@ func main() {
 	})
 
 	// Initialize repositories
-	menuRepo := repository.NewMenuRepository(db)
-	orderRepo := repository.NewOrderRepository(db)
-	sessionRepo := repository.NewPostgresRepository(db)
+	menuRepo := menu.NewMenuRepository(db)
+	orderRepo := order.NewOrderRepository(db)
+	sessionRepo := session.NewPostgresRepository(db)
 
 	// Initialize services with proper dependency injection
-	menuService := service.NewMenuService(menuRepo)
-	sessionService := service.NewService(sessionRepo)
-	orderService := service.NewOrderService(orderRepo, menuService, sessionService) // Inject menuService for validation and sessionService for session validation
+	menuSvc := menu.NewMenuService(menuRepo)
+	sessionSvc := session.NewService(sessionRepo)
+	orderSvc := order.NewOrderService(orderRepo, menuSvc, sessionSvc) // Inject menuService for validation and sessionService for session validation
 
 	// Initialize handlers
-	menuHandler := handler.NewMenuHandler(menuService)
-	orderHandler := handler.NewOrderHandler(orderService)
-	sessionHandler := handler.NewHandler(sessionService)
+	menuHnd := menu.NewMenuHandler(menuSvc)
+	orderHnd := order.NewOrderHandler(orderSvc)
+	sessionHnd := session.NewHandler(sessionSvc)
 
 	// Setup Gin router
 	router := gin.Default()
@@ -150,9 +150,9 @@ func main() {
 	})
 
 	// Register routes from each handler
-	menuHandler.RegisterRoutes(router)
-	orderHandler.RegisterRoutes(router)
-	sessionHandler.RegisterRoutes(router)
+	menuHnd.RegisterRoutes(router)
+	orderHnd.RegisterRoutes(router)
+	sessionHnd.RegisterRoutes(router)
 
 	// Create HTTP server with graceful shutdown support
 	server := &http.Server{

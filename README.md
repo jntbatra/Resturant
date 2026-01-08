@@ -14,6 +14,45 @@ A comprehensive REST API for managing restaurant operations including table sess
 - **Error Handling**: Comprehensive error handling with custom middleware
 - **API Documentation**: Auto-generated Swagger documentation
 - **Database Migrations**: PostgreSQL migrations for schema management
+- **Microservice-Ready Architecture**: Modular design with clear separation of concerns
+
+## Architecture
+
+The application follows a clean, modular architecture designed for easy transition to microservices:
+
+```
+internal/
+├── menu/           # Menu domain module
+│   ├── handler.go      # HTTP handlers
+│   ├── service.go      # Business logic
+│   ├── repository.go   # Data access
+│   ├── models.go       # Domain models
+│   ├── validation.go   # Request validation
+│   └── validator.go    # Validation utilities
+├── order/          # Order domain module
+│   ├── handler.go
+│   ├── service.go
+│   ├── repository.go
+│   ├── models.go
+│   ├── validation.go
+│   └── validator.go
+└── session/        # Session domain module
+    ├── handler.go
+    ├── service.go
+    ├── repository.go
+    ├── models.go
+    ├── validation.go
+    └── validator.go
+```
+
+Each module is self-contained with:
+- **Handler**: HTTP request handling and routing
+- **Service**: Business logic and orchestration
+- **Repository**: Database operations
+- **Models**: Domain entities
+- **Validation**: Input validation and request DTOs
+
+This structure allows each module to be extracted into a separate microservice with minimal changes.
 
 ## Tech Stack
 
